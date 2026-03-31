@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #030712; /* space-950 */
+    color: #f8fafc;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+}
