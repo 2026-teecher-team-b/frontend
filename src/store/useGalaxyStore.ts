@@ -1,49 +1,42 @@
+// 별 및 저장소 상태 관리를 위한 zustand store
 import { create } from 'zustand'
+//
 import type { GalaxyStore } from '@/types/store'
+import { generateClusteredPosition } from '@/utils/physics'
 
 export const useGalaxyStore = create<GalaxyStore>((set) => ({
-  // ── State ──
+  // ── State ───────────────────────────────────────────────────────
   repositories: [],
   scores: {},
   stars: [],
   isConnected: false,
 
-  // ── Actions ──
+  // ── Actions ─────────────────────────────────────────────────────
+
+  /**
+   * 저장소 목록 초기 로드.
+   * 각 저장소에 언어별 클러스터 위치를 부여하고 stars 배열을 구성한다.
+   * 점수 데이터는 scores 맵에 별도 관리되므로 StarProps에 포함하지 않는다.
+   */
   setRepositories: (repos) =>
-    set((state) => {
-      // 저장소 목록 갱신 시 stars 배열도 함께 초기화
-      // position은 physics.ts의 중력 알고리즘으로 계산 예정 (5~6주차)
-      // 지금은 더미 랜덤 위치 사용
+    set(() => {
       const stars = repos.map((repo) => ({
         repoId: repo.id,
         name: repo.name,
-        position: [
-          (Math.random() - 0.5) * 200,
-          (Math.random() - 0.5) * 200,
-          (Math.random() - 0.5) * 200,
-        ] as [number, number, number],
-        activityScore: state.scores[repo.id]?.activityScore ?? 50,
-        healthScore: state.scores[repo.id]?.healthScore ?? 50,
+        position: generateClusteredPosition(repo.language),
         language: repo.language,
-        isBlackHole: (state.scores[repo.id]?.healthScore ?? 50) < 10,
       }))
       return { repositories: repos, stars }
     }),
 
+  /**
+   * 특정 저장소의 점수 갱신.
+   * scores 맵만 교체하므로 해당 repoId를 구독한 Star만 리렌더링된다.
+   * (나머지 별은 영향 없음 → 성능 최적화의 핵심)
+   */
   updateScore: (repoId, score) =>
     set((state) => ({
       scores: { ...state.scores, [repoId]: score },
-      // 해당 별의 속성도 즉시 갱신
-      stars: state.stars.map((star) =>
-        star.repoId === repoId
-          ? {
-              ...star,
-              activityScore: score.activityScore,
-              healthScore: score.healthScore,
-              isBlackHole: score.healthScore < 10,
-            }
-          : star,
-      ),
     })),
 
   setConnected: (connected) => set({ isConnected: connected }),
