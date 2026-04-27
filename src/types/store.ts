@@ -1,4 +1,4 @@
-import type { Repository, RepoScore } from './github'
+import type { Repository, RepoScore, UserInfo } from './github'
 import type { StarProps } from './canvas'
 
 // ──────────────────────────────────────────────────────────────────
@@ -41,6 +41,9 @@ export type GalaxyStore = GalaxyState & GalaxyActions
 // UI Store — 인터랙션 상태
 // ──────────────────────────────────────────────────────────────────
 
+/** 3D 씬 필터 모드 (9~10주차 My Galaxy) */
+export type FilterMode = 'all' | 'my-galaxy'
+
 export interface UIState {
   /** 현재 선택된 별의 repoId (null = 선택 없음) */
   selectedRepoId: number | null
@@ -48,12 +51,42 @@ export interface UIState {
   isPanelOpen: boolean
   /** 툴팁 표시 대상 repoId (hover) */
   hoveredRepoId: number | null
+
+  /** 씬 필터 모드 (전체 / My Galaxy) */
+  filterMode: FilterMode
+  /**
+   * 즐겨찾기(My Galaxy) 저장소 ID 목록.
+   * 로컬에서 관리 → 9~10주차 BE /api/users/me/favorites 연동 예정
+   */
+  favorites: number[]
+
+  /** 로그인한 사용자 정보 (null = 비로그인) */
+  user: UserInfo | null
+
+  /**
+   * 카메라가 추적할 별의 repoId.
+   * null = 자유 탐험 모드, 숫자 = 해당 별로 카메라 이동 + 추적
+   */
+  followedRepoId: number | null
 }
 
 export interface UIActions {
   selectRepo: (repoId: number | null) => void
   setHovered: (repoId: number | null) => void
   closePanel: () => void
+
+  /** 씬 필터 전환 */
+  setFilterMode: (mode: FilterMode) => void
+  /** 즐겨찾기 토글 (추가/제거) */
+  toggleFavorite: (repoId: number) => void
+  /** 즐겨찾기 여부 확인 */
+  isFavorite: (repoId: number) => boolean
+
+  /** 로그인 사용자 정보 세팅 (OAuth 콜백 후 호출) */
+  setUser: (user: UserInfo | null) => void
+
+  /** 카메라 추적 대상 설정 (null = 추적 해제, 자유 탐험) */
+  setCameraFollow: (repoId: number | null) => void
 }
 
 export type UIStore = UIState & UIActions
