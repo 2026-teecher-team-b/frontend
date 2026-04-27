@@ -26,6 +26,7 @@ import Cluster from './objects/Cluster'
 import MeteorEffect from './effects/MeteorEffect'
 import SpaceControls from './controls/SpaceControls'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
+import { useUIStore } from '@/store/useUIStore'
 import { usePhysics } from '@/hooks/3d/usePhysics'
 
 // ── Physics + Stars + Clusters — Canvas 내부 컴포넌트 ─────────────
@@ -93,11 +94,12 @@ function GalaxyScene() {
 export default function Scene() {
   return (
     <Canvas
-      camera={{ position: [0, 0, 200], fov: 60, near: 0.1, far: 2500 }}
+      camera={{ position: [0, 0, 220], fov: 60, near: 0.1, far: 2500 }}
       gl={{ antialias: true, alpha: false }}
       style={{ background: '#020408' }}
-      // frameloop: always → 물리 애니메이션을 위해 항상 렌더
       frameloop="always"
+      // 빈 공간 클릭 → 패널 닫기 + 카메라 추적 해제
+      onPointerMissed={() => useUIStore.getState().closePanel()}
     >
       <GalaxyScene />
     </Canvas>
