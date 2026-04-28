@@ -22,16 +22,16 @@ import { Suspense, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Stars as DreiStars, Preload } from '@react-three/drei'
 import Star from './objects/Star'
-import Cluster from './objects/Cluster'
-import MeteorEffect from './effects/MeteorEffect'
+//import Cluster from './objects/Cluster'
+//import MeteorEffect from './effects/MeteorEffect'
 import SpaceControls from './controls/SpaceControls'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
-import { usePhysics } from '@/hooks/3d/usePhysics'
+//import { usePhysics } from '@/hooks/3d/usePhysics'
 
 // ── Physics + Stars + Clusters — Canvas 내부 컴포넌트 ─────────────
 function GalaxyScene() {
   // N-body 물리 시뮬레이션 (Canvas 내부에서 useFrame 사용)
-  usePhysics()
+  //usePhysics()
 
   const stars = useGalaxyStore((s) => s.stars)
 
@@ -68,9 +68,9 @@ function GalaxyScene() {
       />
 
       {/* ── 성단(Cluster) 시각화 — 언어별 1개 ──────────────────────── */}
-      {clusters.map(({ language, count }) => (
+      {/*clusters.map(({ language, count }) => (
         <Cluster key={language} language={language} starCount={count} />
-      ))}
+      ))*/}
 
       {/* ── 저장소 별 ─────────────────────────────────────────────── */}
       <Suspense fallback={null}>
@@ -81,7 +81,7 @@ function GalaxyScene() {
       </Suspense>
 
       {/* ── 유성 이펙트 ───────────────────────────────────────────── */}
-      <MeteorEffect />
+      {/* <MeteorEffect /> */}
 
       {/* ── 우주 탐험 카메라 ─────────────────────────────────────── */}
       <SpaceControls />

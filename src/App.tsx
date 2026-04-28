@@ -1,10 +1,12 @@
 import { useEffect } from 'react'
 import Scene from '@/canvas/Scene'
-import FrameMonitor from '@/canvas/effects/FrameMonitor'
+//import FrameMonitor from '@/canvas/effects/FrameMonitor'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useMockWebSocket } from '@/api/mockWebSocket'
 import { connectWebSocket, disconnectWebSocket } from '@/api/websocket'
 import { DUMMY_REPOSITORIES, DUMMY_SCORES } from '@/data/dummy'
+import Tooltip from './components/overlay/Tooltip'
+
 
 /**
  * App.tsx — 최상위 레이아웃
@@ -45,8 +47,8 @@ export default function App() {
       <Scene />
 
       {/* ── 2D UI 오버레이 (유민님이 해주시면 됩니다. 구현 예정 구역) ── */}
-      {/* <SidePanel /> */}
-      {/* <Tooltip /> */}
+      {/* <Panel /> */}
+      <Tooltip />
 
       {/* 임시 상태 표시 (개발 중 확인용) */}
       <div className="absolute top-4 left-4 text-xs text-white/40 font-mono pointer-events-none">
@@ -54,7 +56,7 @@ export default function App() {
       </div>
 
       {/* FPS 모니터 (DEV only) */}
-      <FrameMonitor />
+      {/* <FrameMonitor /> */}
     </div>
   )
 }

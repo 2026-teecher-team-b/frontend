@@ -23,7 +23,7 @@ import type { Mesh, MeshStandardMaterial } from 'three'
 import type { StarProps } from '@/types/canvas'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useUIStore } from '@/store/useUIStore'
-import { physicsStore } from '@/store/physicsStore'
+//import { physicsStore } from '@/store/physicsStore'
 import { scoreToRadius, scoreToEmissiveIntensity } from '@/utils/physics'
 
 // ── 언어 → 색상 ───────────────────────────────────────────────────
@@ -73,6 +73,7 @@ export default function Star({ repoId, name, position, language, onClick }: Star
   const fadeAge     = useRef(0)       // 마운트 후 경과 시간 (초)
   const hoveredRef  = useRef(false)
 
+  {/*
   // ── physicsStore 등록 ─────────────────────────────────────────────
   useEffect(() => {
     physicsStore.register(repoId, position, language)
@@ -83,6 +84,7 @@ export default function Star({ repoId, name, position, language, onClick }: Star
   useEffect(() => {
     if (meshRef.current) physicsStore.setMesh(repoId, meshRef.current)
   }, [repoId])
+    */}
 
   // ── 매 프레임: Lerp 갱신 (크기·밝기·페이드인) ──────────────────
   useFrame((_, delta) => {
