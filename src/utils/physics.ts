@@ -4,9 +4,12 @@
  * 포함:
  *  1. Lerp 함수 (스칼라 / Vector3)
  *  2. 점수 → 시각 속성 변환
- *  3. 언어별 성단 중심 좌표 + 드리프트 (느린 공전)
- *  4. N-body 물리 상수 및 힘 계산 헬퍼
- *  5. 별 초기 위치 생성 (클러스터 기반)
+ *  3. 언어별 색상 맵
+ *  4. 깔때기(Wormhole) 수학 — v3 전면 개편
+ *     - activityToY  : 활성도 점수 → Y축 위치
+ *     - funnelRadius : Y좌표 → 해당 Y에서의 깔때기 반지름
+ *     - funnelPosition : (점수, theta) → 3D 위치 [x,y,z]
+ *  5. N-body 상수 (레거시 — 현재는 미사용)
  */
 
 import type { Vector3 } from 'three'
@@ -35,30 +38,119 @@ export function lerpVec3(
 // 2. 점수 → 시각 속성
 // ─────────────────────────────────────────────────────────────────
 
-/** activityScore(0~100) → 별 반지름(0.3~3.0) */
+/** activityScore(0~100) → 별 반지름(0.3~2.8) */
 export function scoreToRadius(score: number): number {
-  return 0.3 + (Math.max(0, Math.min(100, score)) / 100) * 2.7
+  return 0.3 + (Math.max(0, Math.min(100, score)) / 100) * 2.5
 }
 
-/** healthScore(0~100) → emissive 강도(0.1~2.5) */
+/** healthScore(0~100) → emissive 강도(0.05~3.0) */
 export function scoreToEmissiveIntensity(healthScore: number): number {
-  return 0.1 + (Math.max(0, Math.min(100, healthScore)) / 100) * 2.4
+  return 0.05 + (Math.max(0, Math.min(100, healthScore)) / 100) * 2.95
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 3. 언어별 성단 기준 좌표 & 드리프트
+// 3. 언어별 색상
+// ─────────────────────────────────────────────────────────────────
+
+export const LANGUAGE_COLORS: Record<string, string> = {
+  TypeScript:  '#4f8ef7',
+  JavaScript:  '#f7d44f',
+  Python:      '#4da8e0',
+  Go:          '#00d4c8',
+  Rust:        '#f07050',
+  Java:        '#e8a24a',
+  'C++':       '#e05080',
+  Ruby:        '#d94040',
+  Swift:       '#f05c30',
+  Kotlin:      '#b06cff',
+  PHP:         '#9090e0',
+  'C#':        '#68c060',
+  Scala:       '#d04040',
+  Haskell:     '#9060c8',
+}
+export const DEFAULT_COLOR = '#aabbcc'
+
+export function getLanguageColor(language: string | null): string {
+  return language ? (LANGUAGE_COLORS[language] ?? DEFAULT_COLOR) : DEFAULT_COLOR
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 4. 깔때기(Wormhole) 수학  ★ v3 핵심
 // ─────────────────────────────────────────────────────────────────
 //
-// 실제 성단 이미지에서 영감:
-//   TypeScript  → 플레이아데스(Pleiades)  : 파란 산개성단, 중밀도
-//   JavaScript  → 이중성단(Double)         : 두 무리, 따뜻한 노랑
-//   Python      → 오메가 센타우리(Omega Cen): 초고밀도 구상성단
-//   Go          → 나비 성단(Butterfly)     : 나비 모양 두 날개
-//   Rust        → 소원의 우물(Wishing Well) : 붉은·주황 색감
-//   Java        → 프레세페(Praesepe)       : 중밀도 노란 산개
-//   C++         → 머리털자리(Coma)         : 분산, 핑크
-//   Ruby        → 히아데스(Hyades)         : 가장 가까운 V자 배열
-//   Swift       → 페르세우스(Perseus Alpha) : 아름다운 파랑+주황
+//  Y축 = 높이
+//   RIM_Y  = 상단 넓은 입구 (활성도 높은 별들)
+//   THROAT_Y = 하단 좁은 목 (활성도 낮은 별, 블랙홀)
+//
+//  반지름 공식:
+//   r(y) = THROAT_R + (RIM_R - THROAT_R) * ((y - THROAT_Y) / (RIM_Y - THROAT_Y))^EXPONENT
+//
+//  EXPONENT < 1  → 목이 좁고 입구 쪽이 급격히 넓어지는 깔때기 모양.
+//
+
+/** 깔때기 상단 Y 좌표 (활성도 100인 별 위치) */
+export const RIM_Y     =  120
+/** 깔때기 목 Y 좌표 (활성도 0인 별, 블랙홀) */
+export const THROAT_Y  = -160
+/** 상단 입구 반지름 */
+export const RIM_R     =  195
+/** 하단 목 반지름 */
+export const THROAT_R  =    4
+/** 반지름 곡선 지수 (< 1 → 깔때기 형상) */
+export const EXPONENT  =  0.52
+/** Y축 lerp 속도 (클수록 빠르게 목표 Y로 이동) */
+export const FUNNEL_LERP_SPEED = 0.028
+/** 수평 회전 기본 속도 (rad/s) */
+export const BASE_THETA_SPEED  = 0.22
+/** 블랙홀 회전 배율 */
+export const BH_THETA_MULT     = 4.5
+/** 표면 위아래 약간의 노이즈 진폭 */
+export const SURFACE_NOISE_AMP = 6.0
+
+/**
+ * activityScore(0~100) → 깔때기 Y 좌표.
+ * 활성도 높을수록 위, 낮을수록 아래(목).
+ */
+export function activityToY(activityScore: number): number {
+  const t = Math.max(0, Math.min(100, activityScore)) / 100
+  return THROAT_Y + (RIM_Y - THROAT_Y) * t
+}
+
+/**
+ * Y좌표 → 해당 높이에서의 깔때기 반지름.
+ * y가 THROAT_Y 이하면 THROAT_R, RIM_Y 이상이면 RIM_R.
+ */
+export function funnelRadius(y: number): number {
+  const t = Math.max(0, Math.min(1, (y - THROAT_Y) / (RIM_Y - THROAT_Y)))
+  return THROAT_R + (RIM_R - THROAT_R) * Math.pow(t, EXPONENT)
+}
+
+/**
+ * (activityScore, theta) → 깔때기 표면 위의 3D 좌표 [x, y, z].
+ * noiseOffset: 표면에서 약간 위아래 노이즈 (0이면 정확한 표면)
+ */
+export function funnelPosition(
+  activityScore: number,
+  theta: number,
+  noiseOffset = 0,
+): [number, number, number] {
+  const y = activityToY(activityScore) + noiseOffset
+  const r = funnelRadius(y)
+  return [r * Math.cos(theta), y, r * Math.sin(theta)]
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 5. 레거시 N-body 상수 (하위 호환 — 현재 사용 안 함)
+// ─────────────────────────────────────────────────────────────────
+
+export const ATTRACTION_K   = 0.040
+export const REPULSION_K    = 3.8
+export const HOME_SPRING    = 0.005
+export const DAMPING        = 0.91
+export const MAX_SPEED      = 1.2
+export const MIN_DIST       = 4.5
+export const ATTRACTION_RANGE = 75
+export const REPULSION_RANGE  = 30
 
 const CLUSTER_BASES: Record<string, [number, number, number]> = {
   TypeScript:  [ 85,  40,  8],
@@ -77,10 +169,6 @@ const CLUSTER_BASES: Record<string, [number, number, number]> = {
   Haskell:     [ 30,  62, -8],
 }
 
-/**
- * 시간에 따라 천천히 움직이는 성단 중심 좌표.
- * 각 언어마다 위상(phase)이 달라 서로 다른 리듬으로 움직인다.
- */
 export function getDriftingCenter(
   language: string | null,
   time: number,
@@ -88,8 +176,7 @@ export function getDriftingCenter(
   const base = language ? (CLUSTER_BASES[language] ?? [0, 0, 0]) : [0, 0, 0]
   // 언어 첫 글자 코드로 위상 결정 → 언어마다 다른 궤도
   const phase = language ? language.charCodeAt(0) * 1.618 : 0
-  const amp = 14  // 진폭 (단위 거리)
-
+  const amp = 6
   return [
     base[0] + Math.sin(time * 0.11 + phase) * amp,
     base[1] + Math.cos(time * 0.08 + phase * 1.3) * (amp * 0.8),
@@ -97,40 +184,10 @@ export function getDriftingCenter(
   ]
 }
 
-/** 성단 중심 좌표 (드리프트 없는 고정값, Cluster 컴포넌트 초기화용) */
 export function getBaseCenter(language: string | null): [number, number, number] {
   return language ? (CLUSTER_BASES[language] ?? [0, 0, 0]) : [0, 0, 0]
 }
 
-// ─────────────────────────────────────────────────────────────────
-// 4. N-body 물리 상수
-// ─────────────────────────────────────────────────────────────────
-
-/** 같은 언어 별끼리 끌어당기는 강도 */
-export const ATTRACTION_K = 0.018
-/** 다른 언어 별에게 밀려나는 강도 */
-export const REPULSION_K = 2.8
-/** 성단 중심으로 끌리는 스프링 상수 */
-export const HOME_SPRING = 0.022
-/** 속도 감쇠 (1프레임당) */
-export const DAMPING = 0.94
-/** 최대 속력 (units/s) */
-export const MAX_SPEED = 0.45
-/** 최소 거리 (0 나누기 방지) */
-export const MIN_DIST = 5.0
-/** 동일 언어 인력 유효 범위 */
-export const ATTRACTION_RANGE = 55
-/** 타 언어 척력 유효 범위 */
-export const REPULSION_RANGE = 28
-
-// ─────────────────────────────────────────────────────────────────
-// 5. 초기 클러스터 배치 위치 생성
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * 언어 기반 클러스터 중심 + 랜덤 오프셋으로 초기 위치 생성.
- * 물리 시뮬레이션 시작 전 초기값으로만 쓰인다.
- */
 export function generateClusteredPosition(
   language: string | null,
 ): [number, number, number] {
@@ -143,15 +200,6 @@ export function generateClusteredPosition(
   ]
 }
 
-// ─────────────────────────────────────────────────────────────────
-// 6. N-body 힘 계산 (usePhysics에서 호출)
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * 두 별 사이의 힘을 계산하여 entryA의 가속도(fx, fy, fz)에 누적한다.
- *
- * @returns [fx, fy, fz] 증분값
- */
 export function computePairForce(
   ax: number, ay: number, az: number, langA: string | null,
   bx: number, by: number, bz: number, langB: string | null,
@@ -171,7 +219,6 @@ export function computePairForce(
 
   let fx = 0, fy = 0, fz = 0
 
-  // 같은 언어: 인력 (서로 끌어당김)
   if (sameLang && dist < ATTRACTION_RANGE) {
     const f = ATTRACTION_K / (clampedDist * clampedDist)
     fx += nx * f
@@ -179,7 +226,6 @@ export function computePairForce(
     fz += nz * f
   }
 
-  // 가까울 때: 모든 별끼리 척력 (겹침 방지)
   if (dist < REPULSION_RANGE) {
     const f = REPULSION_K / (clampedDist * clampedDist)
     fx -= nx * f

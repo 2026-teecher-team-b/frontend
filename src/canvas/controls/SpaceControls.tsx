@@ -29,8 +29,14 @@ export default function SpaceControls() {
   const isDragging = useRef(false)
   const lastMouse = useRef({ x: 0, y: 0 })
 
-  // 관성 속도 (frame마다 카메라에 적용 후 감쇠)
-  const velocity = useRef({ x: 0, y: 0 })
+  // ── 구형 좌표 refs ────────────────────────────────────────────
+  // phi = π/2.8 → 약간 위에서 내려다보는 각도 (깔때기 전체가 보임)
+  // target = (0, -20, 0) → 깔때기 중간 높이를 바라봄
+  const thetaRef        = useRef(0)
+  const phiRef          = useRef(Math.PI / 2.8)
+  const radiusRef       = useRef(DEFAULT_RADIUS)
+  const targetRadiusRef = useRef(DEFAULT_RADIUS)
+  const targetRef       = useRef(new THREE.Vector3(0, -20, 0))
 
   // 터치 핀치 줌 — 이전 두 손가락 거리
   const lastPinchDist = useRef<number | null>(null)

@@ -5,6 +5,14 @@ import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useMockWebSocket } from '@/api/mockWebSocket'
 import { connectWebSocket, disconnectWebSocket } from '@/api/websocket'
 import { DUMMY_REPOSITORIES, DUMMY_SCORES } from '@/data/dummy'
+// ── 2D UI 컴포넌트 ──────────────────────────────────────────────────
+import SidePanel from '@/components/panel/SidePanel'
+import Tooltip from '@/components/overlay/Tooltip'
+import Legend from '@/components/overlay/Legend'
+import HelpOverlay from '@/components/overlay/HelpOverlay'
+import LoginButton from '@/components/overlay/LoginButton'
+import SearchBar from '@/components/overlay/SearchBar'
+import { useUIStore } from '@/store/useUIStore'
 
 /**
  * App.tsx — 최상위 레이아웃
@@ -53,7 +61,36 @@ export default function App() {
         GitHub Universe — 개발 중
       </div>
 
-      {/* FPS 모니터 (DEV only) */}
+      {/* ── 2D 오버레이 영역 ────────────────────────────────────────── */}
+
+      {/* 접속 상태 + 타이틀 (좌상단) */}
+      <div className="absolute top-4 left-4 text-xs text-white/40 font-mono pointer-events-none z-10 flex items-center gap-2">
+        <span
+          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-400' : 'bg-white/20'}`}
+          title={isConnected ? '실시간 연결됨' : '연결 대기'}
+        />
+        <span>GitHub Universe</span>
+      </div>
+
+      {/* 검색바 (상단 중앙) */}
+      <SearchBar />
+
+      {/* 호버 툴팁 */}
+      <Tooltip />
+
+      {/* 사이드 패널 (우측) */}
+      <SidePanel />
+
+      {/* 언어 범례 (좌하단) */}
+      <Legend />
+
+      {/* 도움말 (우하단) */}
+      <HelpOverlay />
+
+      {/* GitHub 로그인 버튼 (우상단) — 9~10주차 */}
+      <LoginButton />
+
+      {/* FPS 모니터 (DEV only, 우하단 위) */}
       <FrameMonitor />
     </div>
   )
