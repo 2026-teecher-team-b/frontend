@@ -1,4 +1,4 @@
-import type { Repository, RepoScore } from './github'
+import type { Repository, RepoScore, UserInfo } from './github'
 import type { StarProps } from './canvas'
 
 // ──────────────────────────────────────────────────────────────────

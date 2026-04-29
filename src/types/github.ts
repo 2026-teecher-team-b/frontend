@@ -22,6 +22,13 @@ export interface RepoScore {
   updatedAt: string
 }
 
+/** GitHub OAuth 로그인 사용자 */
+export interface UserInfo {
+  login: string
+  avatarUrl: string
+  name: string | null
+}
+
 /** 실시간 SSE/WebSocket 이벤트 페이로드 */
 export interface RepoScoreEvent {
   type: 'SCORE_UPDATE' | 'NEW_TRENDING' | 'BLACKHOLE'
