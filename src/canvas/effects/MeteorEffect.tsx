@@ -205,7 +205,6 @@ export default function MeteorEffect() {
             transparent
             opacity={0}
             visible={false}
-            vertexColors={false}
           />
 
           {/* 유성 헤드 */}

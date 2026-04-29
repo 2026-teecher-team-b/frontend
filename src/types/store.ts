@@ -56,7 +56,6 @@ export interface UIState {
   filterMode: FilterMode
   /**
    * 즐겨찾기(My Galaxy) 저장소 ID 목록.
-   * 로컬에서 관리 → 9~10주차 BE /api/users/me/favorites 연동 예정
    */
   favorites: number[]
 
@@ -68,6 +67,15 @@ export interface UIState {
    * null = 자유 탐험 모드, 숫자 = 해당 별로 카메라 이동 + 추적
    */
   followedRepoId: number | null
+
+  /**
+   * 언어 필터 목록. 빈 배열 = 전체 표시.
+   * 항목이 있으면 해당 언어 별만 보임.
+   */
+  langFilter: string[]
+
+  /** 검색 쿼리 */
+  searchQuery: string
 }
 
 export interface UIActions {
@@ -82,11 +90,19 @@ export interface UIActions {
   /** 즐겨찾기 여부 확인 */
   isFavorite: (repoId: number) => boolean
 
-  /** 로그인 사용자 정보 세팅 (OAuth 콜백 후 호출) */
+  /** 로그인 사용자 정보 세팅 */
   setUser: (user: UserInfo | null) => void
 
-  /** 카메라 추적 대상 설정 (null = 추적 해제, 자유 탐험) */
+  /** 카메라 추적 대상 설정 */
   setCameraFollow: (repoId: number | null) => void
+
+  /** 언어 필터 토글 (켜기/끄기) */
+  toggleLangFilter: (lang: string) => void
+  /** 언어 필터 전체 초기화 */
+  clearLangFilter: () => void
+
+  /** 검색 쿼리 업데이트 */
+  setSearchQuery: (query: string) => void
 }
 
 export type UIStore = UIState & UIActions

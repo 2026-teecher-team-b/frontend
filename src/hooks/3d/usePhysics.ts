@@ -1,100 +1,72 @@
 /**
- * usePhysics.ts — N-body 물리 시뮬레이션
+ * usePhysics.ts — 깔때기(Wormhole) 물리 시뮬레이션  v3
  *
- * Scene.tsx 내부(Canvas 안)에서 단 한 번 호출한다.
- * physicsStore의 모든 별에 대해 매 프레임(2프레임마다 1회) 힘을 계산,
- * 속도/위치를 갱신하고 Three.js 메시에 직접 적용한다.
- * React 리렌더 없음 → 프레임 드랍 없이 50개 별 실시간 이동.
+ * N-body(O(n²)) → 깔때기 구속 이동(O(n)) 으로 전환.
+ * 1000개 별도 60fps에서 쾌적하게 동작한다.
  *
- * 힘 구성:
- *  1. 홈 스프링  : 드리프팅 성단 중심을 향한 복원력
- *  2. N-body   : 같은 언어 = 인력, 모든 별 = 가까우면 척력
- *  3. 감쇠     : 속도 × DAMPING (에너지 손실)
+ * 매 프레임 각 별에 대해:
+ *  1. Zustand에서 최신 activityScore 읽기
+ *  2. activityToY(score) → 목표 Y 계산
+ *  3. currentY를 목표 Y 방향으로 lerp (FUNNEL_LERP_SPEED)
+ *  4. theta += thetaSpeed * dt  (블랙홀은 BH_THETA_MULT 배 빠름)
+ *  5. 표면 노이즈: sin(time + phase) * SURFACE_NOISE_AMP
+ *  6. funnelPosition(score, theta, noise) → 새 [x,y,z]
+ *  7. e.position.set(x, y, z) → e.object.position.copy()
  */
 
 import { useFrame } from '@react-three/fiber'
-import { useRef } from 'react'
 import { physicsStore } from '@/store/physicsStore'
+import { useGalaxyStore } from '@/store/useGalaxyStore'
 import {
-  getDriftingCenter,
-  computePairForce,
-  HOME_SPRING,
-  DAMPING,
-  MAX_SPEED,
+  activityToY,
+  funnelRadius,
+  FUNNEL_LERP_SPEED,
+  BASE_THETA_SPEED,
+  BH_THETA_MULT,
+  SURFACE_NOISE_AMP,
 } from '@/utils/physics'
 
-// 물리 업데이트 주기 (2프레임마다 1회 → 30fps 물리)
-const PHYSICS_STRIDE = 2
-
 export function usePhysics() {
-  const frameRef = useRef(0)
-
   useFrame((state, delta) => {
-    frameRef.current++
-    if (frameRef.current % PHYSICS_STRIDE !== 0) return
-
-    // 누적 델타를 감안한 실질 dt (최대 0.05 cap → 탭 비활성 후 복귀 시 폭발 방지)
-    const dt = Math.min(delta * PHYSICS_STRIDE, 0.05)
+    // delta cap: 탭 비활성 후 복귀 시 폭발 방지
+    const dt = Math.min(delta, 0.05)
     const time = state.clock.elapsedTime
 
+    const scores  = useGalaxyStore.getState().scores
     const entries = physicsStore.getAll()
-    const n = entries.length
-    if (n === 0) return
 
-    // ── 임시 힘 누적 배열 ──────────────────────────────────────────
-    // Float32Array로 GC 압박 최소화
-    const forces = new Float32Array(n * 3) // [fx0,fy0,fz0, fx1,...]
+    for (const e of entries) {
+      // ── 1. 최신 점수 읽기 ─────────────────────────────────────
+      const score       = scores[e.repoId]
+      const activity    = score?.activityScore ?? 50
+      const isBlackHole = (score?.healthScore ?? 50) < 10
 
-    for (let i = 0; i < n; i++) {
-      const a = entries[i]
-      const i3 = i * 3
+      // ── 2. 목표 Y ─────────────────────────────────────────────
+      const targetY = activityToY(activity)
 
-      // 1. 홈 스프링 (드리프팅 성단 중심으로 복원)
-      const [hx, hy, hz] = getDriftingCenter(a.language, time)
-      forces[i3]     += (hx - a.position.x) * HOME_SPRING
-      forces[i3 + 1] += (hy - a.position.y) * HOME_SPRING
-      forces[i3 + 2] += (hz - a.position.z) * HOME_SPRING
+      // ── 3. Y lerp ─────────────────────────────────────────────
+      //   블랙홀은 빠르게 목으로 빨려들어감
+      const lerpSpeed = isBlackHole
+        ? FUNNEL_LERP_SPEED * 3.5
+        : FUNNEL_LERP_SPEED
+      e.currentY += (targetY - e.currentY) * Math.min(lerpSpeed * 60 * dt, 1)
 
-      // 2. N-body 쌍힘 (대칭 이용 → j>i 만 계산, 반작용 동시 적용)
-      for (let j = i + 1; j < n; j++) {
-        const b = entries[j]
-        const j3 = j * 3
+      // ── 4. 수평 회전 ──────────────────────────────────────────
+      const thetaMult = isBlackHole ? BH_THETA_MULT : 1.0
+      e.theta += e.thetaSpeed * BASE_THETA_SPEED * thetaMult * dt
 
-        const [fx, fy, fz] = computePairForce(
-          a.position.x, a.position.y, a.position.z, a.language,
-          b.position.x, b.position.y, b.position.z, b.language,
-        )
+      // ── 5. 표면 노이즈 (부드러운 오르내림) ───────────────────
+      const noise = Math.sin(time * 0.6 + e.noisePhase) * SURFACE_NOISE_AMP
 
-        forces[i3]     += fx
-        forces[i3 + 1] += fy
-        forces[i3 + 2] += fz
-        // 뉴턴 3법칙: b에는 반대 방향
-        forces[j3]     -= fx
-        forces[j3 + 1] -= fy
-        forces[j3 + 2] -= fz
-      }
-    }
+      // ── 6. 새 위치 계산 ───────────────────────────────────────
+      const y = e.currentY + noise
+      const r = funnelRadius(y)
+      const x = r * Math.cos(e.theta)
+      const z = r * Math.sin(e.theta)
 
-    // ── 속도·위치 갱신 + 메시 적용 ─────────────────────────────────
-    for (let i = 0; i < n; i++) {
-      const e = entries[i]
-      const i3 = i * 3
+      e.position.set(x, y, z)
 
-      // 속도 갱신 + 감쇠
-      e.velocity.x = (e.velocity.x + forces[i3]     * dt) * DAMPING
-      e.velocity.y = (e.velocity.y + forces[i3 + 1] * dt) * DAMPING
-      e.velocity.z = (e.velocity.z + forces[i3 + 2] * dt) * DAMPING
-
-      // 최대 속력 제한
-      const spd = e.velocity.length()
-      if (spd > MAX_SPEED) e.velocity.multiplyScalar(MAX_SPEED / spd)
-
-      // 위치 갱신
-      e.position.x += e.velocity.x * dt
-      e.position.y += e.velocity.y * dt
-      e.position.z += e.velocity.z * dt
-
-      // Three.js Object3D(Group)에 직접 적용 (React 리렌더 없음)
+      // ── 7. Three.js Object3D에 직접 적용 ─────────────────────
       if (e.object) {
         e.object.position.copy(e.position)
       }
@@ -102,6 +74,6 @@ export function usePhysics() {
   })
 }
 
-// ── Lerp 유틸 (Star.tsx에서도 사용) ─────────────────────────────
+// ── 하위 호환 export ─────────────────────────────────────────────
 export { lerp } from '@/utils/physics'
 export { lerpStep } from '@/hooks/3d/useLerp'

@@ -49,11 +49,13 @@ export default function SpaceControls() {
   setCameraFollowRef.current = setCameraFollow
 
   // ── 구형 좌표 refs ────────────────────────────────────────────
+  // phi = π/2.8 → 약간 위에서 내려다보는 각도 (깔때기 전체가 보임)
+  // target = (0, -20, 0) → 깔때기 중간 높이를 바라봄
   const thetaRef        = useRef(0)
-  const phiRef          = useRef(Math.PI / 2)
+  const phiRef          = useRef(Math.PI / 2.8)
   const radiusRef       = useRef(DEFAULT_RADIUS)
   const targetRadiusRef = useRef(DEFAULT_RADIUS)
-  const targetRef       = useRef(new THREE.Vector3(0, 0, 0))
+  const targetRef       = useRef(new THREE.Vector3(0, -20, 0))
 
   // ── 드래그 / 관성 ────────────────────────────────────────────
   const dragModeRef   = useRef<'orbit' | 'pan' | null>(null)

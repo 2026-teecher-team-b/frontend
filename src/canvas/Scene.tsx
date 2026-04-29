@@ -1,79 +1,76 @@
 /**
- * Scene.tsx — 3D 씬 최상위
+ * Scene.tsx — 3D 씬 최상위  v3 (Wormhole)
  *
  * 포함 요소:
- *  - 조명 (ambient + 3점 조명)
- *  - 배경 성운 파티클 (drei Stars)
- *  - Cluster 컴포넌트 × 언어 수 (Sparkles 성단 + glow + 라벨)
- *  - Star 컴포넌트 × 50개 (저장소 별)
- *  - MeteorEffect (유성 이펙트)
- *  - SpaceControls (드래그 탐험 카메라)
- *  - usePhysics (N-body 시뮬레이션 — 이 컴포넌트 안에서 한 번 호출)
+ *  - 조명 (ambient + wormhole 테마 3점 조명)
+ *  - 배경 은하 파티클 (drei Stars)
+ *  - WormholeFunnel  : 깔때기 격자 + 빛 고리
+ *  - StarConnections : 같은 언어 별 사이 연결선
+ *  - Star × 1000     : 저장소 별 (깔때기 물리 적용)
+ *  - MeteorEffect    : 유성 이펙트
+ *  - SpaceControls   : 드래그 탐험 카메라
+ *  - usePhysics      : 깔때기 물리 루프
  *
- * 프레임 최적화:
- *  - usePhysics: 2프레임당 1회 물리 계산
- *  - Star: physicsStore → mesh.position 직접 변경 (React 리렌더 없음)
- *  - Cluster: getDriftingCenter로 group.position 직접 변경
- *  - MeteorEffect: ref + 직접 DOM 변경
- *  - FrameMonitor: rAF 기반, setState 없음
+ * v3 변경:
+ *  - Cluster 제거 (깔때기 구조에서 언어별 성단 불필요)
+ *  - WormholeFunnel, StarConnections 추가
+ *  - 조명 색상 → 차갑고 깊은 우주 톤 (파랑/보라)
  */
 
-import { Suspense, useMemo } from 'react'
+import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Stars as DreiStars, Preload } from '@react-three/drei'
 import Star from './objects/Star'
-import Cluster from './objects/Cluster'
+import WormholeFunnel from './objects/WormholeFunnel'
+import StarConnections from './objects/StarConnections'
+import InfiniteGrid from './objects/InfiniteGrid'
 import MeteorEffect from './effects/MeteorEffect'
 import SpaceControls from './controls/SpaceControls'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useUIStore } from '@/store/useUIStore'
 import { usePhysics } from '@/hooks/3d/usePhysics'
 
-// ── Physics + Stars + Clusters — Canvas 내부 컴포넌트 ─────────────
+// ── GalaxyScene — Canvas 내부 ────────────────────────────────────
 function GalaxyScene() {
-  // N-body 물리 시뮬레이션 (Canvas 내부에서 useFrame 사용)
   usePhysics()
 
   const stars = useGalaxyStore((s) => s.stars)
 
-  // 언어별 클러스터 그룹 도출
-  const clusters = useMemo(() => {
-    const map = new Map<string, number>() // language → star count
-    stars.forEach((s) => {
-      const lang = s.language ?? 'Unknown'
-      map.set(lang, (map.get(lang) ?? 0) + 1)
-    })
-    return Array.from(map.entries()).map(([language, count]) => ({
-      language,
-      count,
-    }))
-  }, [stars])
-
   return (
     <>
-      {/* ── 조명 ──────────────────────────────────────────────────── */}
-      <ambientLight intensity={0.22} />
-      <pointLight position={[0, 0, 200]}   intensity={1.0} />
-      <pointLight position={[-160, 130, -60]} intensity={0.5} color="#223366" />
-      <pointLight position={[ 160, -130, -60]} intensity={0.3} color="#661122" />
+      {/* ── 조명 ──────────────────────────────────────────────── */}
+      {/* ambient: 아주 어두운 심우주 톤 */}
+      <ambientLight intensity={0.12} />
+      {/* 메인 포인트: 깔때기 중앙 위에서 아래로 */}
+      <pointLight position={[0, 200, 0]}       intensity={1.8} color="#88bbff" />
+      {/* 보조 1: 왼쪽 아래 — 차가운 파란빛 */}
+      <pointLight position={[-200, -80, 50]}   intensity={0.6} color="#2244aa" />
+      {/* 보조 2: 오른쪽 — 약한 보라 */}
+      <pointLight position={[ 180, 60, -80]}   intensity={0.4} color="#6622aa" />
+      {/* 목(throat) 조명: 붉은 빛 */}
+      <pointLight position={[0, -160, 0]}      intensity={1.2} color="#ff3300" distance={120} decay={2} />
 
-      {/* ── 배경 은하 파티클 ────────────────────────────────────────── */}
+      {/* ── 배경 은하 파티클 ──────────────────────────────────── */}
       <DreiStars
-        radius={900}
-        depth={120}
-        count={12000}
+        radius={1200}
+        depth={180}
+        count={14000}
         factor={3}
-        saturation={0.08}
+        saturation={0.06}
         fade
-        speed={0.08}
+        speed={0.05}
       />
 
-      {/* ── 성단(Cluster) 시각화 — 언어별 1개 ──────────────────────── */}
-      {clusters.map(({ language, count }) => (
-        <Cluster key={language} language={language} starCount={count} />
-      ))}
+      {/* ── 깔때기 구조물 ─────────────────────────────────────── */}
+      <WormholeFunnel />
 
-      {/* ── 저장소 별 ─────────────────────────────────────────────── */}
+      {/* ── 상단 무한 격자 ────────────────────────────────────── */}
+      <InfiniteGrid />
+
+      {/* ── 별 사이 연결선 ────────────────────────────────────── */}
+      <StarConnections />
+
+      {/* ── 저장소 별 1000개 ──────────────────────────────────── */}
       <Suspense fallback={null}>
         {stars.map((star) => (
           <Star key={star.repoId} {...star} />
@@ -81,10 +78,10 @@ function GalaxyScene() {
         <Preload all />
       </Suspense>
 
-      {/* ── 유성 이펙트 ───────────────────────────────────────────── */}
+      {/* ── 유성 이펙트 ───────────────────────────────────────── */}
       <MeteorEffect />
 
-      {/* ── 우주 탐험 카메라 ─────────────────────────────────────── */}
+      {/* ── 우주 탐험 카메라 ──────────────────────────────────── */}
       <SpaceControls />
     </>
   )
@@ -94,11 +91,10 @@ function GalaxyScene() {
 export default function Scene() {
   return (
     <Canvas
-      camera={{ position: [0, 0, 220], fov: 60, near: 0.1, far: 2500 }}
+      camera={{ position: [280, 60, 0], fov: 58, near: 0.1, far: 3000 }}
       gl={{ antialias: true, alpha: false }}
-      style={{ background: '#020408' }}
+      style={{ background: '#01020a' }}
       frameloop="always"
-      // 빈 공간 클릭 → 패널 닫기 + 카메라 추적 해제
       onPointerMissed={() => useUIStore.getState().closePanel()}
     >
       <GalaxyScene />

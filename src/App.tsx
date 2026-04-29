@@ -11,6 +11,7 @@ import Tooltip from '@/components/overlay/Tooltip'
 import Legend from '@/components/overlay/Legend'
 import HelpOverlay from '@/components/overlay/HelpOverlay'
 import LoginButton from '@/components/overlay/LoginButton'
+import SearchBar from '@/components/overlay/SearchBar'
 import { useUIStore } from '@/store/useUIStore'
 
 /**
@@ -86,6 +87,9 @@ export default function App() {
         />
         <span>GitHub Universe</span>
       </div>
+
+      {/* 검색바 (상단 중앙) */}
+      <SearchBar />
 
       {/* 호버 툴팁 */}
       <Tooltip />
