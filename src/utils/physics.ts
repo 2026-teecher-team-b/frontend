@@ -152,7 +152,7 @@ export const MIN_DIST       = 4.5
 export const ATTRACTION_RANGE = 75
 export const REPULSION_RANGE  = 30
 
-export const CLUSTER_BASES: Record<string, [number, number, number]> = {
+const CLUSTER_BASES: Record<string, [number, number, number]> = {
   TypeScript:  [ 85,  40,  8],
   JavaScript:  [ 55, -42,  0],
   Python:      [-90,  25,  5],
@@ -174,12 +174,13 @@ export function getDriftingCenter(
   time: number,
 ): [number, number, number] {
   const base = language ? (CLUSTER_BASES[language] ?? [0, 0, 0]) : [0, 0, 0]
+  // 언어 첫 글자 코드로 위상 결정 → 언어마다 다른 궤도
   const phase = language ? language.charCodeAt(0) * 1.618 : 0
   const amp = 6
   return [
-    base[0] + Math.sin(time * 0.09 + phase) * amp,
-    base[1] + Math.cos(time * 0.07 + phase * 1.3) * (amp * 0.8),
-    base[2] + Math.sin(time * 0.05 + phase * 0.7) * (amp * 0.4),
+    base[0] + Math.sin(time * 0.11 + phase) * amp,
+    base[1] + Math.cos(time * 0.08 + phase * 1.3) * (amp * 0.8),
+    base[2] + Math.sin(time * 0.06 + phase * 0.7) * (amp * 0.4),
   ]
 }
 
@@ -191,11 +192,11 @@ export function generateClusteredPosition(
   language: string | null,
 ): [number, number, number] {
   const base = language ? (CLUSTER_BASES[language] ?? [0, 0, 0]) : [0, 0, 0]
-  const spread = 38
+  const spread = 28
   return [
     base[0] + (Math.random() - 0.5) * spread,
     base[1] + (Math.random() - 0.5) * spread,
-    base[2] + (Math.random() - 0.5) * spread * 0.6,
+    base[2] + (Math.random() - 0.5) * spread * 0.5,
   ]
 }
 
@@ -210,7 +211,7 @@ export function computePairForce(
   if (dist < 0.001) return [0, 0, 0]
 
   const clampedDist = Math.max(dist, MIN_DIST)
-  const nx = dx / dist
+  const nx = dx / dist  // 정규화 방향
   const ny = dy / dist
   const nz = dz / dist
 

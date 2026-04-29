@@ -20,8 +20,7 @@
 
 import { useRef, useEffect, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
-import * as THREE from 'three'
-import type { Group, Mesh, MeshStandardMaterial } from 'three'
+import type { Mesh, MeshStandardMaterial } from 'three'
 import type { StarProps } from '@/types/canvas'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useUIStore } from '@/store/useUIStore'
@@ -93,9 +92,9 @@ export default function Star({ repoId, name, position, language, onClick }: Star
   )
 
   // ── Lerp용 현재값 ref (React 상태 아님 → 리렌더 없이 갱신) ──────
-  const curRadius   = useRef(0)
+  const curRadius   = useRef(0)       // 0에서 시작 → 페이드인
   const curEmissive = useRef(0)
-  const fadeAge     = useRef(0)
+  const fadeAge     = useRef(0)       // 마운트 후 경과 시간 (초)
   const hoveredRef  = useRef(false)
 
   // ── physicsStore 등록 ─────────────────────────────────────────────
@@ -127,8 +126,9 @@ export default function Star({ repoId, name, position, language, onClick }: Star
     fadeAge.current = Math.min(fadeAge.current + delta, 1.0)
     const fadeT = fadeAge.current / 1.0
 
-    // Lerp 속도
+    // Lerp 속도: 점수가 크게 변할수록 빠르게 반응
     const speed = 3.5 * delta
+
     curRadius.current   += (targetRadius   - curRadius.current)   * speed
     curEmissive.current += (targetEmissive - curEmissive.current) * speed
 

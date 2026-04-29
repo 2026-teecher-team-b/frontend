@@ -27,7 +27,6 @@ import InfiniteGrid from './objects/InfiniteGrid'
 import MeteorEffect from './effects/MeteorEffect'
 import SpaceControls from './controls/SpaceControls'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
-import { useUIStore } from '@/store/useUIStore'
 import { usePhysics } from '@/hooks/3d/usePhysics'
 
 // ── GalaxyScene — Canvas 내부 ────────────────────────────────────

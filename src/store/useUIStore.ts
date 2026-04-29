@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import type { UIStore } from '@/types/store'
 
-export const useUIStore = create<UIStore>((set, get) => ({
-  // ── State ──────────────────────────────────────────────────────
+export const useUIStore = create<UIStore>((set) => ({
+  // ── State ──
   selectedRepoId: null,
   isPanelOpen:    false,
   hoveredRepoId:  null,
@@ -13,7 +13,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   langFilter:     [],
   searchQuery:    '',
 
-  // ── 기본 인터랙션 ───────────────────────────────────────────────
+  // ── Actions ──
   selectRepo: (repoId) =>
     set({
       selectedRepoId: repoId,

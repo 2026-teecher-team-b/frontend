@@ -1,4 +1,4 @@
-import type { Repository, RepoScore, UserInfo } from './github'
+import type { Repository, RepoScore } from './github'
 import type { StarProps } from './canvas'
 
 // ──────────────────────────────────────────────────────────────────
@@ -40,9 +40,6 @@ export type GalaxyStore = GalaxyState & GalaxyActions
 // ──────────────────────────────────────────────────────────────────
 // UI Store — 인터랙션 상태
 // ──────────────────────────────────────────────────────────────────
-
-/** 3D 씬 필터 모드 (9~10주차 My Galaxy) */
-export type FilterMode = 'all' | 'my-galaxy'
 
 export interface UIState {
   /** 현재 선택된 별의 repoId (null = 선택 없음) */
