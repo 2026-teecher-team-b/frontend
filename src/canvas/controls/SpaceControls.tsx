@@ -1,101 +1,171 @@
 /**
- * SpaceControls.tsx
- *
- * 넓은 우주 공간을 탐험하는 카메라 컨트롤.
- * OrbitControls(한 점 고정 회전)와 달리 카메라 자체가 공간을 이동한다.
+ * SpaceControls.tsx — 궤도형(Orbit) 카메라 컨트롤
  *
  * 인터랙션:
- *  - 좌클릭 드래그 → X/Y 방향 패닝 (우주 이동)
- *  - 스크롤 휠    → Z 방향 줌인/아웃
- *  - 드래그 해제 후 → 관성(inertia) 적용, 서서히 감속
- *  - 터치 드래그  → 패닝
- *  - 터치 핀치    → 줌인/아웃
+ *  - 좌클릭 드래그 좌우 → Y축 중심 공전 (azimuth θ)
+ *  - 좌클릭 드래그 상하 → 앙각 조절 (elevation φ)
+ *  - 마우스 휠                → 줌인/아웃 (radius)
+ *  - 트랙패드 두 손가락 스크롤  → 줌인/아웃
+ *  - 트랙패드 핀치 (ctrlKey)   → 줌인/아웃 (높은 감도)
+ *  - 드래그 해제 후            → 회전 관성
+ *
+ * 카메라 포커스:
+ *  - followedRepoId == null  → lookAt 타겟을 깔때기 중심(0,0,0)으로 lerp
+ *  - followedRepoId != null  → lookAt 타겟을 해당 별 위치로 lerp (star 클릭/검색)
+ *  - 패널 닫기(X / 외부 클릭) → closePanel() 호출 → followedRepoId = null → 중심 복귀
+ *
+ * 내부 구조:
+ *  spherical = { theta, phi, radius }
+ *  lookTarget = 현재 orbit 중심 (부드럽게 lerp)
+ *  camera.position = lookTarget + (r·cosφ·cosθ, r·sinφ, r·cosφ·sinθ)
+ *  camera.lookAt(lookTarget) 매 프레임 적용
  */
 
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
+import { useUIStore } from '@/store/useUIStore'
+import { physicsStore } from '@/store/physicsStore'
 
-// ── 카메라 이동 한계 ──────────────────────────
-const BOUNDS_XY = 600    // X/Y 이동 최대 범위
-const MIN_Z = 25         // 줌인 최소 거리
-const MAX_Z = 700        // 줌아웃 최대 거리
-const INERTIA_DECAY = 0.88 // 관성 감쇠 계수 (0~1, 높을수록 더 오래 미끄러짐)
-const INERTIA_STOP = 0.05  // 이 값 이하면 속도 0으로 고정
+// ── 드래그 여부 외부 공유 ──────────────────────────────────────────
+// Scene.tsx의 onPointerMissed에서 드래그 직후 패널이 닫히는 걸 방지한다.
+let _dragMoved = false
+export function wasPointerDrag(): boolean { return _dragMoved }
+
+// ── 상수 ──────────────────────────────────────────────────────────
+const ROTATION_SPEED   = 0.0040   // rad / px
+const MIN_PHI          = 0.04     // 최소 앙각 (거의 수평)
+const MAX_PHI          = Math.PI / 2.3   // 최대 앙각 (~78°)
+const MIN_RADIUS       = 80
+const MAX_RADIUS       = 900
+const INERTIA_DECAY    = 0.88
+const INERTIA_STOP     = 0.000_05
+const TARGET_LERP      = 0.055    // lookAt 타겟 보간 속도
+const RADIUS_LERP      = 0.06     // 줌 보간 속도
+const FOCUS_RADIUS     = 100      // 별 클릭 시 자동 줌인 거리
+
+// 초기 카메라 위치 [280, 60, 0] → 구면 좌표
+const INIT_RADIUS = Math.sqrt(280 * 280 + 60 * 60)   // ≈ 287
+const INIT_THETA  = 0                                  // atan2(0, 280)
+const INIT_PHI    = Math.atan2(60, 280)                // ≈ 0.21 rad
 
 export default function SpaceControls() {
   const { camera, gl } = useThree()
 
+  // 구면 좌표 상태 (orbit 반지름·각도)
+  const sph = useRef({ theta: INIT_THETA, phi: INIT_PHI, radius: INIT_RADIUS })
+
+  // 줌 목표값 — 휠/핀치와 자동 포커스가 함께 수정한다
+  const radiusTarget = useRef(INIT_RADIUS)
+  // 이전 followedRepoId — 전환 감지용
+  const prevFollowedId = useRef<number | null>(null)
+
+  // 별 클릭 직전 카메라 상태 스냅샷 — 닫을 때 복원
+  const savedSph = useRef<{ theta: number; phi: number; radius: number } | null>(null)
+
+  // 카메라가 실제로 바라보는 orbit 중심 (lerp로 부드럽게 이동)
+  const lookTarget    = useRef(new THREE.Vector3(0, 0, 0))
+  // 현재 목표 orbit 중심 (desired)
+  const desiredTarget = useRef(new THREE.Vector3(0, 0, 0))
+
   // 드래그 상태
   const isDragging = useRef(false)
-  const lastMouse = useRef({ x: 0, y: 0 })
+  const lastMouse  = useRef({ x: 0, y: 0 })
 
-  // ── 구형 좌표 refs ────────────────────────────────────────────
-  // phi = π/2.8 → 약간 위에서 내려다보는 각도 (깔때기 전체가 보임)
-  // target = (0, -20, 0) → 깔때기 중간 높이를 바라봄
-  const thetaRef        = useRef(0)
-  const phiRef          = useRef(Math.PI / 2.8)
-  const radiusRef       = useRef(DEFAULT_RADIUS)
-  const targetRadiusRef = useRef(DEFAULT_RADIUS)
-  const targetRef       = useRef(new THREE.Vector3(0, -20, 0))
+  // 회전 관성 속도
+  const vel = useRef({ theta: 0, phi: 0 })
 
-  // 터치 핀치 줌 — 이전 두 손가락 거리
+  // 터치 핀치
   const lastPinchDist = useRef<number | null>(null)
 
-  // ── 패닝 계수 계산 ─────────────────────────
-  // 멀리 있을수록(Z 클수록) 같은 픽셀 이동에 더 많이 이동해야 자연스럽다
-  const getPanFactor = () => {
-    return camera.position.z / (window.innerHeight * 1.2)
-  }
-
-  // ── 매 프레임: 관성 적용 + 경계 클램핑 ─────
+  // ── 매 프레임 ─────────────────────────────────────────────────────
   useFrame(() => {
+    // ── 1. 관성 반영 ──────────────────────────────────────────────
     if (!isDragging.current) {
-      camera.position.x += velocity.current.x
-      camera.position.y += velocity.current.y
-
-      velocity.current.x *= INERTIA_DECAY
-      velocity.current.y *= INERTIA_DECAY
-
-      // 아주 작은 값은 0으로 끊기
-      if (Math.abs(velocity.current.x) < INERTIA_STOP) velocity.current.x = 0
-      if (Math.abs(velocity.current.y) < INERTIA_STOP) velocity.current.y = 0
+      sph.current.theta += vel.current.theta
+      sph.current.phi   += vel.current.phi
+      vel.current.theta *= INERTIA_DECAY
+      vel.current.phi   *= INERTIA_DECAY
+      if (Math.abs(vel.current.theta) < INERTIA_STOP) vel.current.theta = 0
+      if (Math.abs(vel.current.phi)   < INERTIA_STOP) vel.current.phi   = 0
     }
 
-    // 경계 클램핑
-    camera.position.x = Math.max(-BOUNDS_XY, Math.min(BOUNDS_XY, camera.position.x))
-    camera.position.y = Math.max(-BOUNDS_XY, Math.min(BOUNDS_XY, camera.position.y))
-    camera.position.z = Math.max(MIN_Z, Math.min(MAX_Z, camera.position.z))
+    // φ 클램핑
+    sph.current.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, sph.current.phi))
+
+    // ── 2. lookAt 타겟 결정 + 자동 줌인/아웃 ─────────────────────
+    const followedId = useUIStore.getState().followedRepoId
+
+    if (followedId !== null) {
+      const entry = physicsStore.entries.get(followedId)
+      desiredTarget.current.copy(entry ? entry.position : new THREE.Vector3(0, 0, 0))
+
+      // null → non-null 전환: 클릭 직전 상태 저장 + 자동 줌인
+      if (prevFollowedId.current === null) {
+        savedSph.current = { ...sph.current, radius: radiusTarget.current }
+        radiusTarget.current = FOCUS_RADIUS
+      }
+    } else {
+      desiredTarget.current.set(0, 0, 0)
+
+      // non-null → null 전환: 저장된 위치로 복원
+      if (prevFollowedId.current !== null && savedSph.current !== null) {
+        sph.current.theta  = savedSph.current.theta
+        sph.current.phi    = savedSph.current.phi
+        radiusTarget.current = savedSph.current.radius
+        savedSph.current = null
+      }
+    }
+    prevFollowedId.current = followedId
+
+    // lookAt 부드럽게 lerp
+    lookTarget.current.lerp(desiredTarget.current, TARGET_LERP)
+
+    // radius 부드럽게 lerp (휠/핀치는 radiusTarget을 직접 수정)
+    sph.current.radius += (radiusTarget.current - sph.current.radius) * RADIUS_LERP
+    sph.current.radius  = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, sph.current.radius))
+
+    // ── 3. 카메라 위치 = lookTarget + 구면 오프셋 ──────────────────
+    const { theta, phi, radius } = sph.current
+    const cosPhi = Math.cos(phi)
+    camera.position.set(
+      lookTarget.current.x + radius * cosPhi * Math.cos(theta),
+      lookTarget.current.y + radius * Math.sin(phi),
+      lookTarget.current.z + radius * cosPhi * Math.sin(theta),
+    )
+    camera.up.set(0, 1, 0)
+    camera.lookAt(lookTarget.current)
   })
 
-  // ── 이벤트 리스너 등록/해제 ─────────────────
+  // ── 이벤트 ─────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = gl.domElement
     canvas.style.cursor = 'grab'
 
-    // ── 마우스 ──────────────────────────────
+    // ── 마우스 ──────────────────────────────────────────────────
     const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return // 좌클릭만
+      if (e.button !== 0) return
       isDragging.current = true
-      velocity.current = { x: 0, y: 0 } // 드래그 시작 시 관성 초기화
+      _dragMoved = false   // 새 인터랙션 시작 시 초기화
+      vel.current = { theta: 0, phi: 0 }
       lastMouse.current = { x: e.clientX, y: e.clientY }
       canvas.style.cursor = 'grabbing'
     }
 
     const onMouseMove = (e: MouseEvent) => {
       if (!isDragging.current) return
-
       const dx = e.clientX - lastMouse.current.x
       const dy = e.clientY - lastMouse.current.y
-      const factor = getPanFactor()
+      // 3px 이상 움직이면 '드래그'로 판정 → onPointerMissed 무시
+      if (Math.sqrt(dx * dx + dy * dy) > 3) _dragMoved = true
 
-      const vx = -dx * factor
-      const vy = dy * factor
+      const dTheta = dx * ROTATION_SPEED
+      const dPhi   = -dy * ROTATION_SPEED
 
-      camera.position.x += vx
-      camera.position.y += vy
-      // 관성을 위해 현재 속도 기록
-      velocity.current = { x: vx, y: vy }
+      sph.current.theta += dTheta
+      sph.current.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, sph.current.phi + dPhi))
 
+      vel.current = { theta: dTheta, phi: dPhi }
       lastMouse.current = { x: e.clientX, y: e.clientY }
     }
 
@@ -104,26 +174,26 @@ export default function SpaceControls() {
       canvas.style.cursor = 'grab'
     }
 
-    // ── 휠 줌 ───────────────────────────────
+    // ── 휠 / 트랙패드 줌 ────────────────────────────────────────
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      // trackpad pinch는 deltaY가 작고 deltaMode=0, 마우스 휠은 크다
-      const factor = e.ctrlKey ? 0.003 : 0.0012
-      const zoomMultiplier = 1 + e.deltaY * factor
-      camera.position.z = Math.max(
-        MIN_Z,
-        Math.min(MAX_Z, camera.position.z * zoomMultiplier),
+      // ctrlKey=true → 트랙패드 핀치 제스처 (민감하게)
+      // ctrlKey=false → 두 손가락 스크롤 or 마우스 휠
+      const factor = e.ctrlKey ? 0.020 : 0.004
+      // radiusTarget 수정 → 다음 프레임에 sph.radius가 lerp로 따라옴
+      radiusTarget.current = Math.max(
+        MIN_RADIUS,
+        Math.min(MAX_RADIUS, radiusTarget.current * (1 + e.deltaY * factor)),
       )
     }
 
-    // ── 터치 (모바일) ─────────────────────────
+    // ── 터치 (모바일) ───────────────────────────────────────────
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 1) {
         isDragging.current = true
-        velocity.current = { x: 0, y: 0 }
+        vel.current = { theta: 0, phi: 0 }
         lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
       } else if (e.touches.length === 2) {
-        // 핀치 시작 — 두 손가락 거리 저장
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
         lastPinchDist.current = Math.hypot(dx, dy)
@@ -136,21 +206,18 @@ export default function SpaceControls() {
       if (e.touches.length === 1 && isDragging.current) {
         const dx = e.touches[0].clientX - lastMouse.current.x
         const dy = e.touches[0].clientY - lastMouse.current.y
-        const factor = getPanFactor()
-
-        const vx = -dx * factor
-        const vy = dy * factor
-        camera.position.x += vx
-        camera.position.y += vy
-        velocity.current = { x: vx, y: vy }
+        const dTheta = dx * ROTATION_SPEED
+        const dPhi   = -dy * ROTATION_SPEED
+        sph.current.theta += dTheta
+        sph.current.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, sph.current.phi + dPhi))
+        vel.current = { theta: dTheta, phi: dPhi }
         lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
       } else if (e.touches.length === 2 && lastPinchDist.current !== null) {
-        // 핀치 줌
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
-        const dist = Math.hypot(dx, dy)
-        const ratio = lastPinchDist.current / dist // 줄어들면 >1 (줌아웃)
-        camera.position.z = Math.max(MIN_Z, Math.min(MAX_Z, camera.position.z * ratio))
+        const dist  = Math.hypot(dx, dy)
+        const ratio = lastPinchDist.current / dist
+        radiusTarget.current = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radiusTarget.current * ratio))
         lastPinchDist.current = dist
       }
     }
@@ -160,7 +227,6 @@ export default function SpaceControls() {
       lastPinchDist.current = null
     }
 
-    // 등록
     canvas.addEventListener('mousedown', onMouseDown)
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)

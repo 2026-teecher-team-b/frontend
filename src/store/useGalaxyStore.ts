@@ -10,6 +10,7 @@ export const useGalaxyStore = create<GalaxyStore>((set) => ({
   scores: {},
   stars: [],
   isConnected: false,
+  lastUpdatedAt: null,
 
   // ── Actions ─────────────────────────────────────────────────────
 
@@ -39,5 +40,21 @@ export const useGalaxyStore = create<GalaxyStore>((set) => ({
       scores: { ...state.scores, [repoId]: score },
     })),
 
+  /**
+   * 초기 점수 일괄 세팅.
+   * 백엔드 GET /repos 응답에서 activityScore/healthScore를 한 번에 주입한다.
+   */
+  setScores: (scores) => set({ scores }),
+
+  /**
+   * 마지막 데이터 갱신 시각 세팅.
+   * App.tsx에서 GET /repos 성공 시 latestBucket 최댓값을 저장한다.
+   */
+  setLastUpdatedAt: (lastUpdatedAt) => set({ lastUpdatedAt }),
+
+  /**
+   * 백엔드 연결/데이터 로드 성공 여부.
+   * WebSocket 제거 후 "첫 데이터 로드 성공" 표시로 재활용.
+   */
   setConnected: (connected) => set({ isConnected: connected }),
 }))

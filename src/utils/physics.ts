@@ -38,9 +38,23 @@ export function lerpVec3(
 // 2. 점수 → 시각 속성
 // ─────────────────────────────────────────────────────────────────
 
-/** activityScore(0~100) → 별 반지름(0.3~2.8) */
-export function scoreToRadius(score: number): number {
-  return 0.3 + (Math.max(0, Math.min(100, score)) / 100) * 2.5
+/**
+ * 별 시각 반지름 계산
+ *
+ * sizeScore(0~100): 저장소 규모 (star수·fork수 기반) → 기본 크기 결정
+ *   - 0점  → 0.35 (작은 별)
+ *   - 100점 → 2.35 (큰 별)
+ *
+ * activityScore(0~100): 최근 활동 지수 → ±20% 배율 조정
+ *   - 0점  → ×0.75 (활동 없어서 약간 작게)
+ *   - 100점 → ×1.15 (활발해서 약간 크게)
+ *
+ * 최종 범위: 약 0.26 ~ 2.70
+ */
+export function scoreToRadius(sizeScore: number, activityScore = 50): number {
+  const base = 0.35 + (Math.max(0, Math.min(100, sizeScore)) / 100) * 2.0
+  const actMult = 0.75 + (Math.max(0, Math.min(100, activityScore)) / 100) * 0.40
+  return base * actMult
 }
 
 /** healthScore(0~100) → emissive 강도(0.05~3.0) */

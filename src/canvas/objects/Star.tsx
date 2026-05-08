@@ -20,6 +20,7 @@
 
 import { useRef, useEffect, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { Shape, ExtrudeGeometry, Group } from 'three'
 import type { Mesh, MeshStandardMaterial } from 'three'
 import type { StarProps } from '@/types/canvas'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
@@ -29,13 +30,13 @@ import { scoreToRadius, scoreToEmissiveIntensity, getLanguageColor } from '@/uti
 import BlackHoleSpiral from '@/canvas/effects/BlackHoleSpiral'
 
 // ── 5각별 ExtrudeGeometry 생성 ────────────────────────────────────
-function createStarGeometry(): THREE.ExtrudeGeometry {
+function createStarGeometry(): ExtrudeGeometry {
   const outerR = 1.0
   const innerR = 0.40
   const pts    = 5
   const step   = (Math.PI * 2) / pts
 
-  const shape = new THREE.Shape()
+  const shape = new Shape()
   for (let i = 0; i < pts; i++) {
     const oa = i * step - Math.PI / 2
     const ia = oa + step / 2
@@ -48,7 +49,7 @@ function createStarGeometry(): THREE.ExtrudeGeometry {
   shape.closePath()
 
   const depth = 0.30
-  const geo = new THREE.ExtrudeGeometry(shape, {
+  const geo = new ExtrudeGeometry(shape, {
     depth,
     bevelEnabled:   true,
     bevelThickness: 0.07,
@@ -64,7 +65,7 @@ const SHARED_STAR_GEO = createStarGeometry()
 
 // ─────────────────────────────────────────────────────────────────
 export default function Star({ repoId, name, position, language, onClick }: StarProps) {
-  const groupRef = useRef<Group>(null)
+  const groupRef = useRef<Group | null>(null)
   const meshRef  = useRef<Mesh>(null)
   const matRef   = useRef<MeshStandardMaterial>(null)
 
@@ -75,7 +76,11 @@ export default function Star({ repoId, name, position, language, onClick }: Star
   const score         = useGalaxyStore((s) => s.scores[repoId])
   const activityScore = score?.activityScore ?? 50
   const healthScore   = score?.healthScore   ?? 50
-  const isBlackHole   = healthScore < 10
+  const sizeScore     = score?.sizeScore     ?? 30   // 기본 30 → 중간 크기
+  // 블랙홀 기준: healthScore < 2 (시간당 0.1건 미만 = 사실상 완전 방치)
+  // calcHealthScore 공식: hourlyAvg * 20 → 0.1/hr = 2점
+  // 메트릭 없는 레포는 healthScore=50 기본값이므로 블랙홀 미해당
+  const isBlackHole   = healthScore < 2
 
   // ── 언어 필터: 활성 필터가 있고 내 언어가 포함 안 되면 숨김 ────────
   const langFilter = useUIStore((s) => s.langFilter)
@@ -84,7 +89,8 @@ export default function Star({ repoId, name, position, language, onClick }: Star
   const { selectRepo, setHovered } = useUIStore()
 
   // ── 파생 시각 목표값 ─────────────────────────────────────────────
-  const targetRadius   = useMemo(() => scoreToRadius(activityScore),         [activityScore])
+  // 별 크기 = sizeScore(기본) × activityScore(활동 배율)
+  const targetRadius   = useMemo(() => scoreToRadius(sizeScore, activityScore), [sizeScore, activityScore])
   const targetEmissive = useMemo(() => scoreToEmissiveIntensity(healthScore), [healthScore])
   const color          = useMemo(
     () => isBlackHole ? '#050508' : getLanguageColor(language),

@@ -1,10 +1,14 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+// 개발: '' (빈 문자열) → Vite 프록시가 /repos, /auth 등을 localhost:8080으로 포워딩
+// 운영: VITE_API_BASE_URL 에 EC2 주소 설정 (예: https://api.gitgalaxy.com)
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   timeout: 10_000,
+  // withCredentials: Vite 프록시 사용 시 same-origin이므로 불필요
+  // PROD 배포 시 CORS 설정에 맞게 활성화
   headers: {
     'Content-Type': 'application/json',
   },
@@ -23,7 +27,10 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('[API Error]', error.response?.status, error.message)
+    // 401은 미로그인 상태로 정상 처리 — 콘솔 에러 생략
+    if (error.response?.status !== 401) {
+      console.error('[API Error]', error.response?.status, error.message)
+    }
     return Promise.reject(error)
   },
 )

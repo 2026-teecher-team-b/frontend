@@ -4,17 +4,18 @@
  * UX:
  *  - 상단 중앙 고정
  *  - 단축키 "/" 또는 Cmd+K 로 포커스
+ *  - 검색어 없이 포커스 → 활동 상위 5개 바로 표시 (빠른 접근)
  *  - 실시간 결과 드롭다운 (최대 8개)
  *  - 키보드 탐색 (↑↓ Enter Esc)
  *  - 결과 클릭 → 해당 별 사이드패널 열기 + 카메라 추적
  *  - 검색어와 일치하는 텍스트 하이라이트
- *  - 언어 배지, 활성도 바, 별 수 표시
+ *  - 언어 배지, 활성도 바, 활성 점수 표시
  */
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useUIStore } from '@/store/useUIStore'
-import { formatCount } from '@/utils/format'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 const LANGUAGE_COLORS: Record<string, string> = {
   TypeScript: '#4f8ef7', JavaScript: '#f7d44f', Python:    '#4da8e0',
@@ -51,11 +52,20 @@ export default function SearchBar() {
   const repositories = useGalaxyStore((s) => s.repositories)
   const scores       = useGalaxyStore((s) => s.scores)
   const selectRepo   = useUIStore((s) => s.selectRepo)
+  const isMobile     = useIsMobile()
 
-  // ── 검색 결과 (이름 우선, 최대 8개) ──────────────────────────────
+  // ── 빈 쿼리 → 활동 상위 5개, 쿼리 있으면 → 필터 결과 (최대 8개) ──
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return []
+
+    if (!q) {
+      // 포커스만 됐을 때: 활동 상위 5개 표시
+      if (!open) return []
+      return [...repositories]
+        .sort((a, b) => (scores[b.id]?.activityScore ?? 0) - (scores[a.id]?.activityScore ?? 0))
+        .slice(0, 5)
+    }
+
     return repositories
       .filter(
         (r) =>
@@ -71,7 +81,7 @@ export default function SearchBar() {
         return (scores[b.id]?.activityScore ?? 0) - (scores[a.id]?.activityScore ?? 0)
       })
       .slice(0, 8)
-  }, [query, repositories, scores])
+  }, [query, repositories, scores, open])
 
   // ── 결과 선택 ─────────────────────────────────────────────────
   const selectResult = useCallback(
@@ -134,23 +144,33 @@ export default function SearchBar() {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  // ── 쿼리 변경 시 드롭다운 열기 ──────────────────────────────
+  // ── 쿼리 변경 ──────────────────────────────────────────────
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value
     setQuery(v)
-    setOpen(v.trim().length > 0)
+    setOpen(true)
     setCursor(-1)
   }
 
+  const isEmptyQuery = query.trim().length === 0
+  const showDrop     = open && results.length > 0
+  const showNoResult = open && !isEmptyQuery && results.length === 0
+
+  // 모바일: 상단바(status + login) 아래, 좌우 여백 12px로 전체 너비
+  // 데스크톱: 상단 중앙 고정, 최대 380px
+  const wrapperClass = isMobile
+    ? 'absolute top-14 left-3 right-3 z-30'
+    : 'absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[380px] max-w-[calc(100vw-2rem)]'
+
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[380px] max-w-[calc(100vw-2rem)]">
+    <div className={wrapperClass}>
       {/* ── 입력창 ──────────────────────────────────────────────── */}
       <div className={`
         flex items-center gap-2.5 px-3.5 py-2.5
         bg-black/60 backdrop-blur-xl
         border rounded-xl shadow-2xl
         transition-all duration-200
-        ${open && results.length > 0
+        ${showDrop
           ? 'border-blue-400/40 rounded-b-none'
           : 'border-white/12 hover:border-white/20'
         }
@@ -169,9 +189,9 @@ export default function SearchBar() {
           type="text"
           value={query}
           onChange={onChange}
-          onFocus={() => query.trim() && setOpen(true)}
+          onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder="저장소 검색…"
+          placeholder={`저장소 검색… (${repositories.length}개)`}
           className="
             flex-1 bg-transparent text-white/90 text-sm font-mono
             placeholder:text-white/25 outline-none
@@ -199,7 +219,7 @@ export default function SearchBar() {
       </div>
 
       {/* ── 드롭다운 결과 ─────────────────────────────────────── */}
-      {open && results.length > 0 && (
+      {showDrop && (
         <div
           ref={dropRef}
           className="
@@ -208,6 +228,13 @@ export default function SearchBar() {
             rounded-b-xl shadow-2xl overflow-hidden
           "
         >
+          {/* 빈 쿼리일 때 헤더 */}
+          {isEmptyQuery && (
+            <div className="px-3.5 py-2 border-b border-white/6 text-[9px] text-white/25 font-mono">
+              활동 상위 저장소
+            </div>
+          )}
+
           <ul>
             {results.map((repo, idx) => {
               const score    = scores[repo.id]
@@ -249,7 +276,7 @@ export default function SearchBar() {
                         {highlight(repo.fullName, query.trim())}
                       </p>
 
-                      {/* 활성도 바 + 별 수 */}
+                      {/* 활성도 바 + 점수 */}
                       <div className="mt-1 flex items-center gap-2">
                         <div className="flex-1 h-0.5 bg-white/10 rounded-full overflow-hidden">
                           <div
@@ -262,7 +289,7 @@ export default function SearchBar() {
                           />
                         </div>
                         <span className="text-[9px] text-white/30 font-mono flex-shrink-0">
-                          ★ {formatCount(repo.starCount)}
+                          활동 {activity}
                         </span>
                       </div>
                     </div>
@@ -291,13 +318,15 @@ export default function SearchBar() {
             <span>↑↓ 탐색</span>
             <span>Enter 선택</span>
             <span>Esc 닫기</span>
-            <span className="ml-auto">{results.length}개 결과</span>
+            {!isEmptyQuery && (
+              <span className="ml-auto">{results.length}개 결과</span>
+            )}
           </div>
         </div>
       )}
 
       {/* 검색어 있는데 결과 없을 때 */}
-      {open && query.trim() && results.length === 0 && (
+      {showNoResult && (
         <div className="bg-black/75 backdrop-blur-xl border border-t-0 border-white/10 rounded-b-xl px-4 py-3 text-[11px] text-white/30 font-mono">
           '{query}'에 해당하는 저장소가 없습니다
         </div>
