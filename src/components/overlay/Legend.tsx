@@ -27,11 +27,11 @@ export default function Legend() {
   const toggleLangFilter = useUIStore((s) => s.toggleLangFilter)
   const clearLangFilter  = useUIStore((s) => s.clearLangFilter)
 
-  // 씬에 존재하는 언어 + 해당 별 수 집계
+  // 씬에 존재하는 언어 + 해당 별 수 집계 (language=null 제외)
   const langCounts = new Map<string, number>()
   stars.forEach((s) => {
-    const l = s.language ?? 'Unknown'
-    langCounts.set(l, (langCounts.get(l) ?? 0) + 1)
+    if (!s.language) return  // null/undefined → 범례에서 숨김
+    langCounts.set(s.language, (langCounts.get(s.language) ?? 0) + 1)
   })
   const languages = Array.from(langCounts.entries()).sort((a, b) => b[1] - a[1])
 

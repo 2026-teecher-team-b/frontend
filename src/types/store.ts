@@ -1,4 +1,4 @@
-import type { Repository, RepoScore } from './github'
+import type { Repository, RepoScore, UserInfo } from './github'
 import type { StarProps } from './canvas'
 
 // ──────────────────────────────────────────────────────────────────
@@ -22,7 +22,13 @@ export interface GalaxyState {
    */
   stars: StarProps[]
 
-  /** WebSocket 연결 상태 */
+  /**
+   * 백엔드에서 마지막으로 데이터를 성공적으로 불러온 시각.
+   * GET /repos 응답의 latestBucket 최댓값을 저장한다.
+   */
+  lastUpdatedAt: string | null
+
+  /** 백엔드 데이터 로드 완료 여부 (WebSocket 제거 후 재활용) */
   isConnected: boolean
 }
 
@@ -31,7 +37,11 @@ export interface GalaxyActions {
   setRepositories: (repos: Repository[]) => void
   /** 특정 저장소 점수 갱신 (WebSocket 수신 시 호출) */
   updateScore: (repoId: number, score: RepoScore) => void
-  /** WebSocket 연결 상태 세팅 */
+  /** 초기 점수 일괄 세팅 (백엔드 GET /repos 응답 처리 시 사용) */
+  setScores: (scores: Record<number, RepoScore>) => void
+  /** 마지막 데이터 갱신 시각 세팅 */
+  setLastUpdatedAt: (isoString: string | null) => void
+  /** 백엔드 연결 상태 세팅 (데이터 로드 성공 여부) */
   setConnected: (connected: boolean) => void
 }
 

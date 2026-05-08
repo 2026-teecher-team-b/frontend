@@ -1,44 +1,12 @@
-import { Client } from '@stomp/stompjs'
-import type { RepoScoreEvent } from '@/types/github'
-import { useGalaxyStore } from '@/store/useGalaxyStore'
+/**
+ * websocket.ts — WebSocket 미사용 (스케줄러 기반 아키텍처로 전환)
+ *
+ * 이 시스템은 GitHub 데이터를 10~30분 간격 스케줄러로 수집하며,
+ * 그 주기보다 빠른 WebSocket 푸시는 실질적 의미가 없습니다.
+ * 대신 App.tsx에서 5분 간격 폴링으로 최신 데이터를 갱신합니다.
+ *
+ * WebSocket 재도입이 필요해지면 (예: 이벤트 기반 Webhook 아키텍처 전환 시)
+ * 이 파일에 connectWebSocket / disconnectWebSocket 을 구현하세요.
+ */
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080/ws'
-
-let stompClient: Client | null = null
-
-export function connectWebSocket() {
-  stompClient = new Client({
-    brokerURL: WS_URL,
-    reconnectDelay: 5000,
-
-    onConnect: () => {
-      console.log('[WS] Connected')
-      useGalaxyStore.getState().setConnected(true)
-
-      // 실시간 점수 변화 구독
-      stompClient?.subscribe('/topic/scores', (message) => {
-        try {
-          const event: RepoScoreEvent = JSON.parse(message.body)
-          useGalaxyStore.getState().updateScore(event.repoId, event.score)
-        } catch (e) {
-          console.error('[WS] Parse error', e)
-        }
-      })
-    },
-
-    onDisconnect: () => {
-      console.log('[WS] Disconnected')
-      useGalaxyStore.getState().setConnected(false)
-    },
-
-    onStompError: (frame) => {
-      console.error('[WS] STOMP error', frame)
-    },
-  })
-
-  stompClient.activate()
-}
-
-export function disconnectWebSocket() {
-  stompClient?.deactivate()
-}
+export {}

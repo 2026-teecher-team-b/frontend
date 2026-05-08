@@ -25,8 +25,9 @@ import WormholeFunnel from './objects/WormholeFunnel'
 import StarConnections from './objects/StarConnections'
 import InfiniteGrid from './objects/InfiniteGrid'
 import MeteorEffect from './effects/MeteorEffect'
-import SpaceControls from './controls/SpaceControls'
+import SpaceControls, { wasPointerDrag } from './controls/SpaceControls'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
+import { useUIStore } from '@/store/useUIStore'
 import { usePhysics } from '@/hooks/3d/usePhysics'
 
 // ── GalaxyScene — Canvas 내부 ────────────────────────────────────
@@ -94,7 +95,10 @@ export default function Scene() {
       gl={{ antialias: true, alpha: false }}
       style={{ background: '#01020a' }}
       frameloop="always"
-      onPointerMissed={() => useUIStore.getState().closePanel()}
+      onPointerMissed={() => {
+        // 드래그 직후엔 패널 닫지 않음 (회전 후 의도치 않은 닫힘 방지)
+        if (!wasPointerDrag()) useUIStore.getState().closePanel()
+      }}
     >
       <GalaxyScene />
     </Canvas>

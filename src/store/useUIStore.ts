@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { UIStore } from '@/types/store'
 
-export const useUIStore = create<UIStore>((set) => ({
+export const useUIStore = create<UIStore>((set, get) => ({
   // ── State ──
   selectedRepoId: null,
   isPanelOpen:    false,
