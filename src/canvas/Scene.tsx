@@ -20,21 +20,18 @@
 import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Stars as DreiStars, Preload } from '@react-three/drei'
-import Star from './objects/Star'
+import InstancedStarField from './objects/InstancedStarField'
 import WormholeFunnel from './objects/WormholeFunnel'
 import StarConnections from './objects/StarConnections'
 import InfiniteGrid from './objects/InfiniteGrid'
 import MeteorEffect from './effects/MeteorEffect'
 import SpaceControls, { wasPointerDrag } from './controls/SpaceControls'
-import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useUIStore } from '@/store/useUIStore'
 import { usePhysics } from '@/hooks/3d/usePhysics'
 
 // ── GalaxyScene — Canvas 내부 ────────────────────────────────────
 function GalaxyScene() {
   usePhysics()
-
-  const stars = useGalaxyStore((s) => s.stars)
 
   return (
     <>
@@ -70,11 +67,9 @@ function GalaxyScene() {
       {/* ── 별 사이 연결선 ────────────────────────────────────── */}
       <StarConnections />
 
-      {/* ── 저장소 별 1000개 ──────────────────────────────────── */}
+      {/* ── 저장소 별 (InstancedMesh — draw call 1회로 수만 개 처리) ── */}
       <Suspense fallback={null}>
-        {stars.map((star) => (
-          <Star key={star.repoId} {...star} />
-        ))}
+        <InstancedStarField />
         <Preload all />
       </Suspense>
 

@@ -18,6 +18,7 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import ScoreChart from './ScoreChart'
 import RAGAnalysis from './RAGAnalysis'
 import { timeAgo } from '@/utils/format'
+import { BLACKHOLE_HEALTH_THRESHOLD } from '@/utils/physics'
 
 const LANGUAGE_COLORS: Record<string, string> = {
   TypeScript: '#4f8ef7', JavaScript: '#f7d44f', Python: '#4da8e0',
@@ -162,7 +163,7 @@ export default function SidePanel() {
               <div className="grid grid-cols-3 gap-2">
                 {[
                   { label: '활동', value: score.activityScore, color: '#4f8ef7' },
-                  { label: '건강', value: score.healthScore,   color: score.healthScore < 2 ? '#f87171' : score.healthScore < 40 ? '#fb923c' : '#4ade80' },
+                  { label: '건강', value: score.healthScore,   color: score.healthScore < BLACKHOLE_HEALTH_THRESHOLD ? '#f87171' : score.healthScore < 40 ? '#fb923c' : '#4ade80' },
                   { label: '트렌드', value: `${score.trendDelta > 0 ? '+' : ''}${score.trendDelta.toFixed(0)}`, color: score.trendDelta > 0 ? '#4ade80' : '#f87171' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="bg-white/4 rounded-lg p-2.5 text-center border border-white/5">
