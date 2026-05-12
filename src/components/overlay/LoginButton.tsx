@@ -22,22 +22,27 @@ const GitHubIcon = ({ className }: { className?: string }) => (
 )
 
 export default function LoginButton() {
-  const user     = useUIStore((s) => s.user)
-  const isMobile = useIsMobile()
+  const user             = useUIStore((s) => s.user)
+  const openProfileModal = useUIStore((s) => s.openProfileModal)
+  const isMobile         = useIsMobile()
 
-  // ── 로그인 상태: 아바타 + (데스크톱에서만) 유저명 ─────────────
+  // ── 로그인 상태: 아바타 클릭 → 프로필 모달 ───────────────────
   if (user) {
     return (
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+      <button
+        onClick={openProfileModal}
+        className="absolute top-4 right-4 z-20 flex items-center gap-2 hover:opacity-80 transition-opacity"
+        title="프로필 / 즐겨찾기"
+      >
         <img
           src={user.profileUrl || `https://github.com/${user.githubLogin}.png?size=28`}
           alt={user.githubLogin}
-          className="w-7 h-7 rounded-full border border-white/20"
+          className="w-7 h-7 rounded-full border border-white/20 hover:border-white/50 transition-colors"
         />
         {!isMobile && (
           <span className="text-[11px] font-mono text-white/50">{user.githubLogin}</span>
         )}
-      </div>
+      </button>
     )
   }
 

@@ -102,6 +102,13 @@ export function getLanguageColor(language: string | null): string {
 //  EXPONENT < 1  → 목이 좁고 입구 쪽이 급격히 넓어지는 깔때기 모양.
 //
 
+/**
+ * 블랙홀 판정 healthScore 임계값
+ * calcHealthScore: hourlyAvg × 20 → 0.1 events/hr = 2점
+ * 즉 하루 약 2.4건 미만 활동 레포만 블랙홀로 표시
+ */
+export const BLACKHOLE_HEALTH_THRESHOLD = 2
+
 /** 깔때기 상단 Y 좌표 (활성도 100인 별 위치) */
 export const RIM_Y     =  120
 /** 깔때기 목 Y 좌표 (활성도 0인 별, 블랙홀) */

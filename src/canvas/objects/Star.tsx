@@ -26,7 +26,7 @@ import type { StarProps } from '@/types/canvas'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useUIStore } from '@/store/useUIStore'
 import { physicsStore } from '@/store/physicsStore'
-import { scoreToRadius, scoreToEmissiveIntensity, getLanguageColor } from '@/utils/physics'
+import { scoreToRadius, scoreToEmissiveIntensity, getLanguageColor, BLACKHOLE_HEALTH_THRESHOLD } from '@/utils/physics'
 import BlackHoleSpiral from '@/canvas/effects/BlackHoleSpiral'
 
 // ── 5각별 ExtrudeGeometry 생성 ────────────────────────────────────
@@ -80,7 +80,7 @@ export default function Star({ repoId, name, position, language, onClick }: Star
   // 블랙홀 기준: healthScore < 2 (시간당 0.1건 미만 = 사실상 완전 방치)
   // calcHealthScore 공식: hourlyAvg * 20 → 0.1/hr = 2점
   // 메트릭 없는 레포는 healthScore=50 기본값이므로 블랙홀 미해당
-  const isBlackHole   = healthScore < 2
+  const isBlackHole   = healthScore < BLACKHOLE_HEALTH_THRESHOLD
 
   // ── 언어 필터: 활성 필터가 있고 내 언어가 포함 안 되면 숨김 ────────
   const langFilter = useUIStore((s) => s.langFilter)

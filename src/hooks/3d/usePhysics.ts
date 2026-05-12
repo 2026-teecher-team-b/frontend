@@ -24,6 +24,7 @@ import {
   BASE_THETA_SPEED,
   BH_THETA_MULT,
   SURFACE_NOISE_AMP,
+  BLACKHOLE_HEALTH_THRESHOLD,
 } from '@/utils/physics'
 
 export function usePhysics() {
@@ -39,7 +40,7 @@ export function usePhysics() {
       // ── 1. 최신 점수 읽기 ─────────────────────────────────────
       const score       = scores[e.repoId]
       const activity    = score?.activityScore ?? 50
-      const isBlackHole = (score?.healthScore ?? 50) < 10
+      const isBlackHole = (score?.healthScore ?? 50) < BLACKHOLE_HEALTH_THRESHOLD
 
       // ── 2. 목표 Y ─────────────────────────────────────────────
       const targetY = activityToY(activity)
