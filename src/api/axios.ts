@@ -7,8 +7,8 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   timeout: 10_000,
-  // withCredentials: Vite 프록시 사용 시 same-origin이므로 불필요
-  // PROD 배포 시 CORS 설정에 맞게 활성화
+  // EC2 백엔드와 쿠키 기반 세션(OAuth) 공유에 필요
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },

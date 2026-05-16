@@ -1,26 +1,22 @@
 /**
  * InstancedStarField.tsx — 모든 별을 단일 InstancedMesh로 렌더링
  *
- * [왜 Instanced?]
- *  - 개별 <Star> 컴포넌트 방식: 1000개 = 1000번 draw call → GPU 병목
- *  - InstancedMesh: 수만 개도 draw call 1번으로 처리 → 60fps 유지
+ * [색상 적용 원리 — THREE.js 셰이더 컴파일 이슈]
+ * InstancedMesh는 instanceColor가 null이면 USE_INSTANCING_COLOR 없이 셰이더를 컴파일.
+ * 이후 setColorAt을 아무리 불러도 색상이 적용되지 않음.
+ * 해결:
+ *   1. useLayoutEffect([]) — 마운트 직후 instanceColor 초기화 + material.needsUpdate = true
+ *   2. useFrame 초반 몇 프레임 — material.needsUpdate = true 재강제 (타이밍 보장)
+ *   3. 매 프레임 instanceColor.needsUpdate = true 로 GPU 버퍼 동기화
  *
- * [동작 방식]
- *  - repositories 배열 길이 = instance count
- *  - 매 프레임 physicsStore에서 위치 읽어 instanceMatrix 갱신
- *  - 언어 색상 + health 밝기를 instanceColor로 표현 (bakeEmissive)
- *  - hover/click: e.instanceId → repoId 매핑
- *
- * [블랙홀 처리]
- *  - healthScore < BLACKHOLE_HEALTH_THRESHOLD인 레포는 검정 + 빠른 자전
- *  - BlackHoleSpiral은 별도 컴포넌트로 해당 레포 위치에만 렌더링 (적은 수)
- *
- * [언어 필터]
- *  - 숨겨야 할 instance는 scale을 0으로 세팅 (invisible, still in buffer)
+ * [별 크기]
+ * STAR_SCALE = 5.0 배율 적용 — MeshBasicMaterial은 emissive 글로우가 없으므로
+ * 크게 키워야 카메라(distance ~280) 에서 선명하게 보임.
  */
 
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useMemo, useEffect, useLayoutEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
+import type { ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Shape, ExtrudeGeometry } from 'three'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
@@ -28,7 +24,6 @@ import { useUIStore } from '@/store/useUIStore'
 import { physicsStore } from '@/store/physicsStore'
 import {
   scoreToRadius,
-  scoreToEmissiveIntensity,
   getLanguageColor,
   BLACKHOLE_HEALTH_THRESHOLD,
 } from '@/utils/physics'
@@ -60,13 +55,24 @@ function createStarGeometry(): ExtrudeGeometry {
 
 const SHARED_GEO = createStarGeometry()
 
+/** InstancedMesh 최대 슬롯 수 — args에 고정해야 R3F가 재생성하지 않음 */
+const MAX_INSTANCES = 2000
+
+/**
+ * 별 크기 배율.
+ * MeshBasicMaterial은 emissive 글로우가 없으므로 카메라(~280 units)에서
+ * 선명하게 보이려면 scoreToRadius 결과값을 크게 키워야 함.
+ */
+const STAR_SCALE = 5.0
+
 // ── 재사용 Three.js 객체 (GC 방지) ─────────────────────────────────
-const _mat = new THREE.Matrix4()
-const _pos = new THREE.Vector3()
-const _quat = new THREE.Quaternion()
+const _mat   = new THREE.Matrix4()
+const _pos   = new THREE.Vector3()
+const _quat  = new THREE.Quaternion()
 const _scale = new THREE.Vector3()
 const _euler = new THREE.Euler()
 const _color = new THREE.Color()
+const _white = new THREE.Color('#ffffff')
 
 // ─────────────────────────────────────────────────────────────────────
 export default function InstancedStarField() {
@@ -84,11 +90,6 @@ export default function InstancedStarField() {
     () => repositories.map((r) => r.id),
     [repositories],
   )
-  const repoIdToInstance = useMemo(() => {
-    const m = new Map<number, number>()
-    repositories.forEach((r, i) => m.set(r.id, i))
-    return m
-  }, [repositories])
 
   // ── 별마다 다른 회전 속도 (seeded) ──────────────────────────────
   const rotSpeeds = useMemo(
@@ -104,55 +105,46 @@ export default function InstancedStarField() {
   const curScale = useRef<Float32Array>(new Float32Array(0))
   const hoveredIdx = useRef(-1)
 
-  // count가 바뀌면 버퍼 재할당
-  useEffect(() => {
+  // 셰이더 재컴파일용 카운터 — count > 0 이후 처음 몇 프레임 동안 material.needsUpdate 강제
+  const shaderBootFrames = useRef(0)
+
+  // count 변경 시 버퍼 재할당
+  useLayoutEffect(() => {
     rotY.current     = new Float32Array(count)
     rotZ.current     = new Float32Array(count)
     rotX.current     = new Float32Array(count)
     fadeAge.current  = new Float32Array(count)
     curScale.current = new Float32Array(count)
+    // count가 생기면 셰이더 재컴파일 카운터 리셋
+    shaderBootFrames.current = 0
   }, [count])
 
-  // ── physicsStore 등록 (기존 Star.tsx가 하던 역할) ───────────────
+  // ── 셰이더 USE_INSTANCING_COLOR 초기화 ──────────────────────────
+  // 마운트 직후(첫 rAF 이전)에 instanceColor를 non-null로 만들고
+  // material.needsUpdate = true 로 셰이더 재컴파일을 예약.
+  useLayoutEffect(() => {
+    const mesh = meshRef.current
+    if (!mesh) return
+    // instanceColor 버퍼 생성 (setColorAt 호출 시 자동 생성)
+    mesh.setColorAt(0, _white)
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    // 셰이더 재컴파일 예약 — USE_INSTANCING_COLOR 포함 버전으로
+    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+    if (mat) (mat as THREE.Material).needsUpdate = true
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── physicsStore 등록 ────────────────────────────────────────────
   useEffect(() => {
     repositories.forEach((repo) => {
       const score = scores[repo.id]
       const activityScore = score?.activityScore ?? 50
-      // 이미 등록된 레포는 register 내부에서 skip됨
       physicsStore.register(repo.id, [0, 0, 0], repo.language, activityScore)
     })
-    // 더 이상 존재하지 않는 레포 정리
     const repoIds = new Set(repositories.map((r) => r.id))
     physicsStore.entries.forEach((_, id) => {
       if (!repoIds.has(id)) physicsStore.unregister(id)
     })
   }, [repositories, scores])
-
-  // ── 인스턴스 색상 업데이트 (scores 변경 시) ─────────────────────
-  useEffect(() => {
-    const mesh = meshRef.current
-    if (!mesh || count === 0) return
-
-    for (let i = 0; i < count; i++) {
-      const repo        = repositories[i]
-      const score       = scores[repo.id]
-      const healthScore = score?.healthScore ?? 50
-      const isBlackHole = healthScore < BLACKHOLE_HEALTH_THRESHOLD
-
-      if (isBlackHole) {
-        _color.set('#050508')
-      } else {
-        const langHex = getLanguageColor(repo.language)
-        _color.set(langHex)
-        // health 점수에 따라 밝기 조절 (emissive 효과를 색에 베이킹)
-        const brightness = 0.5 + scoreToEmissiveIntensity(healthScore) * 0.3
-        _color.multiplyScalar(brightness)
-      }
-      mesh.setColorAt(i, _color)
-    }
-
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  }, [repositories, scores, count])
 
   // ── 매 프레임 업데이트 ──────────────────────────────────────────
   useFrame((_, delta) => {
@@ -160,13 +152,19 @@ export default function InstancedStarField() {
     if (!mesh || count === 0) return
 
     const dt = Math.min(delta, 0.05)
-    let colorDirty = false
+
+    // count가 처음 생긴 직후 몇 프레임: material.needsUpdate = true 강제
+    // (셰이더 재컴파일 타이밍 보장 — 환경에 따라 useLayoutEffect만으론 부족할 수 있음)
+    if (shaderBootFrames.current < 8) {
+      shaderBootFrames.current++
+      const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+      if (mat) (mat as THREE.Material).needsUpdate = true
+    }
 
     for (let i = 0; i < count; i++) {
       const repoId = instanceToRepoId[i]
       const entry  = physicsStore.entries.get(repoId)
 
-      // physicsStore에 아직 없는 레포 → 크기 0으로 숨김
       if (!entry) {
         _scale.setScalar(0)
         _mat.compose(_pos, _quat, _scale)
@@ -181,23 +179,20 @@ export default function InstancedStarField() {
       const sizeScore   = score?.sizeScore     ?? 30
       const isBlackHole = healthScore < BLACKHOLE_HEALTH_THRESHOLD
       const isHovered   = i === hoveredIdx.current
+      const isHidden    = langFilter.length > 0 && !langFilter.includes(repo.language ?? '')
 
-      // 언어 필터 숨김
-      const isHidden = langFilter.length > 0 && !langFilter.includes(repo.language ?? '')
-
-      // 페이드인
-      fadeAge.current[i] = Math.min(fadeAge.current[i] + dt, 1.0)
+      // ── 페이드인 ─────────────────────────────────────────────
+      fadeAge.current[i] = Math.min(fadeAge.current[i] + dt * 2.8, 1.0)
       const fadeT = fadeAge.current[i]
 
-      // 목표 스케일
-      const targetScale = isHidden ? 0 : scoreToRadius(sizeScore, actScore)
+      // ── 스케일 Lerp (STAR_SCALE 배율 적용) ───────────────────
+      const targetScale = isHidden ? 0 : scoreToRadius(sizeScore, actScore) * STAR_SCALE
       const hoverMult   = isHovered ? 1.35 : 1.0
-
-      // Lerp 스케일 (부드러운 확대/축소)
-      curScale.current[i] += (targetScale - curScale.current[i]) * (3.5 * dt)
+      const prevScale   = curScale.current[i] || 0
+      curScale.current[i] = prevScale + (targetScale - prevScale) * (3.5 * dt)
       const finalScale = Math.max(0, curScale.current[i] * hoverMult * fadeT)
 
-      // 자전
+      // ── 자전 ─────────────────────────────────────────────────
       const speedMult = isBlackHole ? 4.5 : 1.0
       rotY.current[i] += dt * rotSpeeds[i] * speedMult * 0.14
       rotZ.current[i] += dt * rotSpeeds[i] * speedMult * 0.07
@@ -207,28 +202,26 @@ export default function InstancedStarField() {
       _quat.setFromEuler(_euler)
       _pos.copy(entry.position)
       _scale.setScalar(finalScale)
-
       _mat.compose(_pos, _quat, _scale)
       mesh.setMatrixAt(i, _mat)
 
-      // hover 시 색상 펄스 (매 프레임 갱신은 비용이 크므로 hover 인스턴스만)
-      if (isHovered && mesh.instanceColor) {
-        const langHex   = getLanguageColor(repo.language)
-        const healthSc  = score?.healthScore ?? 50
-        _color.set(isBlackHole ? '#050508' : langHex)
-        if (!isBlackHole) _color.multiplyScalar(0.5 + scoreToEmissiveIntensity(healthSc) * 0.45)
-        mesh.setColorAt(i, _color)
-        colorDirty = true
+      // ── 색상: 매 프레임 언어별 원색으로 설정 ─────────────────
+      if (isBlackHole) {
+        _color.set('#050508')
+      } else {
+        _color.set(getLanguageColor(repo.language))
+        if (isHovered) _color.lerp(_white, 0.30)
       }
+      mesh.setColorAt(i, _color)
     }
 
     mesh.instanceMatrix.needsUpdate = true
-    if (colorDirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
   })
 
   // ── 이벤트 핸들러 ────────────────────────────────────────────────
-  const handlePointerOver = (e: THREE.Event & { instanceId?: number }) => {
-    (e as unknown as { stopPropagation: () => void }).stopPropagation?.()
+  const handlePointerOver = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation()
     const idx = e.instanceId
     if (idx === undefined || idx < 0) return
     hoveredIdx.current = idx
@@ -245,25 +238,17 @@ export default function InstancedStarField() {
     document.body.style.cursor = 'grab'
   }
 
-  const handleClick = (e: THREE.Event & { instanceId?: number }) => {
-    (e as unknown as { stopPropagation: () => void }).stopPropagation?.()
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation()
     const idx = e.instanceId
     if (idx === undefined || idx < 0) return
     const repoId = instanceToRepoId[idx]
     if (repoId !== undefined) {
       selectRepo(repoId)
-      if (import.meta.env.DEV) {
-        const repo  = repositories[idx]
-        const score = scores[repoId]
-        console.log(
-          `[Galaxy] ${repo?.name} | activity=${score?.activityScore} health=${score?.healthScore}` +
-          ((score?.healthScore ?? 50) < BLACKHOLE_HEALTH_THRESHOLD ? ' 🕳️ 블랙홀' : ''),
-        )
-      }
     }
   }
 
-  // ── 블랙홀 레포 목록 (BlackHoleSpiral 전용) ─────────────────────
+  // ── 블랙홀 레포 목록 ─────────────────────────────────────────────
   const blackHoleRepos = useMemo(
     () => repositories.filter((r) => (scores[r.id]?.healthScore ?? 50) < BLACKHOLE_HEALTH_THRESHOLD),
     [repositories, scores],
@@ -273,26 +258,18 @@ export default function InstancedStarField() {
 
   return (
     <>
-      {/* ── 단일 InstancedMesh — 모든 별 ───────────────────────── */}
       <instancedMesh
         ref={meshRef}
-        args={[SHARED_GEO, undefined, count]}
-        onClick={handleClick as never}
-        onPointerOver={handlePointerOver as never}
+        args={[SHARED_GEO, undefined, MAX_INSTANCES]}
+        count={count}
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
         frustumCulled={false}
       >
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.22}
-          metalness={0.42}
-          transparent
-          emissive="#ffffff"
-          emissiveIntensity={0.08}
-        />
+        <meshBasicMaterial vertexColors />
       </instancedMesh>
 
-      {/* ── 블랙홀 강착원반 — 해당 레포 위치에만 개별 렌더링 ─────── */}
       {blackHoleRepos.map((repo) => (
         <BlackHoleWrapper key={repo.id} repoId={repo.id} />
       ))}

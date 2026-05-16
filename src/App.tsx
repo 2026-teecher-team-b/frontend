@@ -24,6 +24,118 @@ import { useUIStore } from '@/store/useUIStore'
 const POLL_INTERVAL_MS = 5 * 60 * 1000
 
 /**
+ * 백엔드 점수 정규화 — 데이터셋 내 상대 분포로 리스케일
+ *
+ * 문제: 백엔드 calcHealthScore = hourlyAvg × 20.
+ *       일반 GitHub 레포 활동량(<<0.1 events/hr) → healthScore < 2 → 전부 블랙홀.
+ *
+ * 해결: 데이터가 있는 레포들 중 p95 기준으로 정규화.
+ *   - 상위 5%  → 80~100점 (밝은 별)
+ *   - 중간     → 20~60점  (보통 별)
+ *   - 하위 5%  → 5~15점   (희미한 별)
+ *   - 데이터 없음 → 건강도 5점 (블랙홀 임계값 초과, 희미하게 표시)
+ *
+ * 블랙홀은 원시 점수가 0이고 latestBucket도 없는 진짜 무데이터 레포만 해당.
+ */
+/**
+ * ID 기반 결정론적 의사난수 (0~1)
+ * 배치 데이터 없을 때 레포마다 다른 시각 속성 부여용.
+ */
+function pseudoRand(seed: number): number {
+  const h = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b)
+  return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff
+}
+
+function normalizeScores(
+  rawScores: Record<number, RepoScore>,
+  items: RepoListItemDto[],
+): Record<number, RepoScore> {
+  const result: Record<number, RepoScore> = {}
+
+  // 실제 의미있는 점수가 있는 레포 분리
+  const activeItems  = items.filter(i => {
+    const s = rawScores[i.id]
+    return s && (s.healthScore > 0 || s.activityScore > 0 || s.sizeScore > 0)
+  })
+
+  // ── 케이스 A: 배치 미실행 → 전체 점수가 0 ─────────────────────────
+  // ID 기반 결정론적 분포로 은하를 채움 (블랙홀 없음, 다양한 크기/밝기)
+  if (activeItems.length === 0) {
+    console.info('[App] 배치 데이터 없음 — ID 기반 시각 분산 적용')
+    items.forEach(item => {
+      const r1 = pseudoRand(item.id)
+      const r2 = pseudoRand(item.id * 7 + 3)
+      const r3 = pseudoRand(item.id * 13 + 5)
+      result[item.id] = {
+        ...rawScores[item.id],
+        // 정규분포 느낌: 중간대가 많고 양 극단이 적음
+        healthScore:   Math.round(15 + r1 * 70),   // 15~85
+        activityScore: Math.round(10 + r2 * 65),   // 10~75
+        sizeScore:     Math.round(12 + r3 * 68),   // 12~80
+        trendDelta:    0,
+      }
+    })
+    return result
+  }
+
+  // ── 케이스 B: 일부만 점수 있음 → 혼합 처리 ────────────────────────
+  const rawHealth = activeItems.map(i => rawScores[i.id].healthScore)
+  const rawAct    = activeItems.map(i => rawScores[i.id].activityScore)
+  const rawSize   = activeItems.map(i => rawScores[i.id].sizeScore)
+
+  /** n번째 백분위 값 */
+  const pct = (arr: number[], p: number) => {
+    const s = [...arr].sort((a, b) => a - b)
+    return s[Math.floor(s.length * p)] ?? s[s.length - 1]
+  }
+
+  /** p5~p95 구간 → targetMin~targetMax (제곱근 스케일) */
+  const mapRange = (v: number, lo: number, hi: number, tLo: number, tHi: number) => {
+    if (hi <= lo) return (tLo + tHi) / 2
+    const t = Math.sqrt(Math.max(0, Math.min(1, (v - lo) / (hi - lo))))
+    return tLo + t * (tHi - tLo)
+  }
+
+  const hLo = pct(rawHealth, 0.05), hHi = pct(rawHealth, 0.95)
+  const aLo = pct(rawAct,    0.05), aHi = pct(rawAct,    0.95)
+  const sLo = pct(rawSize,   0.05), sHi = pct(rawSize,   0.95)
+
+  const activeIds = new Set(activeItems.map(i => i.id))
+
+  items.forEach(item => {
+    const raw = rawScores[item.id]
+
+    if (!activeIds.has(item.id)) {
+      // latestBucket 없거나 점수 전부 0인데 배치는 돌았음 → 희미한 별
+      const r = pseudoRand(item.id)
+      result[item.id] = {
+        ...raw,
+        healthScore:   Math.round(8  + r * 20),  // 8~28 (블랙홀 임계값 2 초과)
+        activityScore: Math.round(3  + r * 15),
+        sizeScore:     Math.round(5  + r * 18),
+        trendDelta: 0,
+      }
+      return
+    }
+
+    // 정규화 적용
+    const health = Math.max(3,  Math.min(100, Math.round(mapRange(raw.healthScore,  hLo, hHi, 8,  95))))
+    const act    = Math.max(1,  Math.min(100, Math.round(mapRange(raw.activityScore, aLo, aHi, 3, 90))))
+    const size   = Math.max(3,  Math.min(100, Math.round(mapRange(raw.sizeScore,    sLo, sHi, 5,  95))))
+
+    // trendDelta: 활동 상위 15% → 양수, 하위 15% → 음수
+    const rank = rawAct.filter(v => v <= raw.activityScore).length / rawAct.length
+    const trendDelta = rank > 0.85 ? +(rank * 20).toFixed(1)
+                     : rank < 0.15 ? -((1 - rank) * 20).toFixed(1)
+                     : 0
+
+    result[item.id] = { ...raw, healthScore: health, activityScore: act, sizeScore: size, trendDelta }
+  })
+
+  return result
+}
+
+/**
  * 백엔드 GET /repos 응답 DTO
  */
 interface RepoListItemDto {
@@ -33,6 +145,9 @@ interface RepoListItemDto {
   name: string
   description: string | null
   language: string | null
+  starCount: number | null
+  forkCount: number | null
+  openIssueCount: number | null
   brightnessScore: number
   activeScore: number
   healthScore: number
@@ -71,26 +186,38 @@ export default function App() {
         if (!silent) console.log(`[App] 백엔드에서 레포 ${items.length}개 로드`)
 
         const repos: Repository[] = items.map((item) => ({
-          id:          item.id,
-          name:        item.name,
-          fullName:    item.fullName,
-          owner:       item.owner,
-          description: item.description,
-          language:    item.language,
+          id:             item.id,
+          name:           item.name,
+          fullName:       item.fullName,
+          owner:          item.owner,
+          description:    item.description,
+          language:       item.language,
+          starCount:      item.starCount ?? undefined,
+          forkCount:      item.forkCount ?? undefined,
+          openIssueCount: item.openIssueCount ?? undefined,
         }))
 
-        const scores: Record<number, RepoScore> = {}
+        // ① 원시 float 값 보존 (Math.round 제거 — 정규화 정밀도 향상)
+        const rawScores: Record<number, RepoScore> = {}
         items.forEach((item) => {
           const hasMetrics = item.latestBucket !== null
-          scores[item.id] = {
+          rawScores[item.id] = {
             repoId:        item.id,
-            activityScore: hasMetrics ? Math.round(item.activeScore)  : 0,
-            healthScore:   hasMetrics ? Math.round(item.healthScore)  : 50,
-            sizeScore:     hasMetrics ? Math.round(item.sizeScore)    : 10,
+            activityScore: hasMetrics ? item.activeScore  : 0,
+            healthScore:   hasMetrics ? item.healthScore  : 0,  // 없으면 0 → normalizeScores에서 5로 처리
+            sizeScore:     hasMetrics ? item.sizeScore    : 0,
             trendDelta:    0,
             updatedAt:     item.latestBucket ?? new Date().toISOString(),
           }
         })
+
+        // ② 데이터셋 상대 분포 기준 정규화 → 별 스펙트럼 생성
+        const scores = normalizeScores(rawScores, items)
+
+        if (!silent) {
+          const blackholes = Object.values(scores).filter(s => s.healthScore < 2).length
+          console.log(`[App] 정규화 완료 — 별: ${items.length - blackholes}개, 블랙홀: ${blackholes}개`)
+        }
 
         const latestBuckets = items
           .map((i) => i.latestBucket)

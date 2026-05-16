@@ -18,15 +18,7 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import ScoreChart from './ScoreChart'
 import RAGAnalysis from './RAGAnalysis'
 import { timeAgo } from '@/utils/format'
-import { BLACKHOLE_HEALTH_THRESHOLD } from '@/utils/physics'
-
-const LANGUAGE_COLORS: Record<string, string> = {
-  TypeScript: '#4f8ef7', JavaScript: '#f7d44f', Python: '#4da8e0',
-  Go: '#00d4c8', Rust: '#f07050', Java: '#e8a24a',
-  'C++': '#e05080', Ruby: '#d94040', Swift: '#f05c30',
-  Kotlin: '#b06cff', PHP: '#9090e0', 'C#': '#68c060',
-  Scala: '#d04040', Haskell: '#9060c8',
-}
+import { BLACKHOLE_HEALTH_THRESHOLD, getLanguageColor } from '@/utils/physics'
 
 export default function SidePanel() {
   const { isPanelOpen, selectedRepoId, closePanel, toggleFavorite, isFavorite } = useUIStore()
@@ -73,7 +65,7 @@ export default function SidePanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [closePanel])
 
-  const langColor = repo?.language ? (LANGUAGE_COLORS[repo.language] ?? '#aabbcc') : '#aabbcc'
+  const langColor = getLanguageColor(repo?.language ?? null)
   const repoOwner = repo ? (repo.owner ?? repo.fullName.split('/')[0]) : ''
   const repoName  = repo?.name ?? ''
 

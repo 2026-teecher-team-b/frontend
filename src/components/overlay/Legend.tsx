@@ -10,14 +10,7 @@
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { useUIStore } from '@/store/useUIStore'
 import { useState } from 'react'
-
-const LANGUAGE_COLORS: Record<string, string> = {
-  TypeScript: '#4f8ef7', JavaScript: '#f7d44f', Python:    '#4da8e0',
-  Go:         '#00d4c8', Rust:       '#f07050', Java:      '#e8a24a',
-  'C++':      '#e05080', Ruby:       '#d94040', Swift:     '#f05c30',
-  Kotlin:     '#b06cff', PHP:        '#9090e0', 'C#':      '#68c060',
-  Scala:      '#d04040', Haskell:    '#9060c8',
-}
+import { getLanguageColor } from '@/utils/physics'
 
 export default function Legend() {
   const [collapsed, setCollapsed] = useState(false)
@@ -71,7 +64,7 @@ export default function Legend() {
           {/* 언어 목록 */}
           <ul className="space-y-1">
             {languages.map(([lang, count]) => {
-              const color   = LANGUAGE_COLORS[lang] ?? '#aabbcc'
+              const color   = getLanguageColor(lang)
               const active  = langFilter.includes(lang)
               const dimmed  = isFiltering && !active
 
