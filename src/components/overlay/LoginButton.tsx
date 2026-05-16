@@ -9,11 +9,13 @@
 import { useUIStore } from '@/store/useUIStore'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
-// 개발: 백엔드 주소 직접 사용 (OAuth redirect_uri가 8080으로 고정)
-// 운영: 같은 도메인 → 상대 경로 사용
+// 개발: Vite 프록시가 /oauth2 → localhost:8080 으로 포워딩 (vite.config.ts 참조)
+// 운영: VITE_API_BASE_URL(EC2 도메인)을 앞에 붙여 백엔드로 직접 요청
+//   → 프론트(Vercel)와 백엔드(EC2)가 다른 도메인이라 상대경로 불가
+const API_BASE  = import.meta.env.VITE_API_BASE_URL ?? ''
 const OAUTH_URL = import.meta.env.DEV
-  ? 'http://localhost:8080/oauth2/authorization/github'
-  : '/oauth2/authorization/github'
+  ? '/oauth2/authorization/github'
+  : `${API_BASE}/oauth2/authorization/github`
 
 const GitHubIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">

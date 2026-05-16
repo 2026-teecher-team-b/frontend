@@ -41,25 +41,27 @@ export function lerpVec3(
 /**
  * 별 시각 반지름 계산
  *
- * sizeScore(0~100): 저장소 규모 (star수·fork수 기반) → 기본 크기 결정
- *   - 0점  → 0.35 (작은 별)
- *   - 100점 → 2.35 (큰 별)
+ * 정규화 후 sizeScore/activityScore가 3~95 범위로 들어옴.
+ * 제곱근 스케일 적용 → 중간 크기 별이 많아져 은하가 풍성해 보임.
  *
- * activityScore(0~100): 최근 활동 지수 → ±20% 배율 조정
- *   - 0점  → ×0.75 (활동 없어서 약간 작게)
- *   - 100점 → ×1.15 (활발해서 약간 크게)
- *
- * 최종 범위: 약 0.26 ~ 2.70
+ * 최종 범위: 약 0.22 ~ 2.55
  */
 export function scoreToRadius(sizeScore: number, activityScore = 50): number {
-  const base = 0.35 + (Math.max(0, Math.min(100, sizeScore)) / 100) * 2.0
-  const actMult = 0.75 + (Math.max(0, Math.min(100, activityScore)) / 100) * 0.40
+  const s = Math.max(0, Math.min(100, sizeScore))
+  const a = Math.max(0, Math.min(100, activityScore))
+  const base    = 0.28 + Math.sqrt(s / 100) * 1.85   // 제곱근: 하위권도 어느 정도 크기 보장
+  const actMult = 0.80 + (a / 100) * 0.45             // 활동 기반 ±25% 조정
   return base * actMult
 }
 
-/** healthScore(0~100) → emissive 강도(0.05~3.0) */
+/**
+ * healthScore(0~100) → emissive 강도 (0.15 ~ 1.95)
+ * 로그 스케일: 낮은 점수도 완전히 꺼지지 않고 희미하게 빛남.
+ * 정규화 후 최솟값이 3 이상이므로 블랙홀이 아닌 별은 항상 보임.
+ */
 export function scoreToEmissiveIntensity(healthScore: number): number {
-  return 0.05 + (Math.max(0, Math.min(100, healthScore)) / 100) * 2.95
+  const h = Math.max(0, Math.min(100, healthScore))
+  return 0.15 + (Math.log1p(h / 100 * Math.E) / Math.log1p(Math.E)) * 1.8
 }
 
 // ─────────────────────────────────────────────────────────────────

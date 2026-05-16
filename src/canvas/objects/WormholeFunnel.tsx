@@ -100,16 +100,19 @@ export default function WormholeFunnel() {
       { r: RIM_R * 1.26, color: 0x0088cc, opacity: 0.25 },
       { r: RIM_R * 1.45, color: 0x005599, opacity: 0.12 },
     ]
-    return layers.map(({ r, color, opacity }) => ({
-      geo: makeCircleGeo(r),
-      mat: new THREE.LineBasicMaterial({
+    return layers.map(({ r, color, opacity }) => {
+      const geo = makeCircleGeo(r)
+      const mat = new THREE.LineBasicMaterial({
         color,
         transparent: true,
         opacity,
         depthWrite: false,
         blending:   THREE.AdditiveBlending,
-      }),
-    }))
+      })
+      const lineObj = new THREE.Line(geo, mat)
+      lineObj.position.set(0, RIM_Y, 0)
+      return lineObj
+    })
   }, [])
 
   // ── 목(Throat) 고리 ────────────────────────────────────────────
@@ -175,10 +178,8 @@ export default function WormholeFunnel() {
       </lineSegments>
 
       {/* ── 입구 평면 글로우 링 (지평선과 같은 Y=RIM_Y 평면) ─ */}
-      {rimCircles.map(({ geo, mat }, i) => (
-        <line key={i} geometry={geo} position={[0, RIM_Y, 0]}>
-          <primitive object={mat} attach="material" />
-        </line>
+      {rimCircles.map((lineObj, i) => (
+        <primitive key={i} object={lineObj} />
       ))}
 
       {/* ── 목 빛 고리 (하단) ────────────────────────────────── */}

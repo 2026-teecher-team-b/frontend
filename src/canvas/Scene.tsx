@@ -68,8 +68,11 @@ function GalaxyScene() {
       <StarConnections />
 
       {/* ── 저장소 별 (InstancedMesh — draw call 1회로 수만 개 처리) ── */}
+      {/* Suspense 밖에 배치 — Preload가 suspend 되더라도 별은 항상 렌더링 */}
+      <InstancedStarField />
+
+      {/* ── 비동기 에셋 프리로드 (별과 별도 Suspense로 분리) ── */}
       <Suspense fallback={null}>
-        <InstancedStarField />
         <Preload all />
       </Suspense>
 

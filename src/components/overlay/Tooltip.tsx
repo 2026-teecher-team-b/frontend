@@ -5,15 +5,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useUIStore } from '@/store/useUIStore'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { formatCount } from '@/utils/format'
-
-const LANGUAGE_COLORS: Record<string, string> = {
-  TypeScript: '#4f8ef7', JavaScript: '#f7d44f', Python: '#4da8e0',
-  Go: '#00d4c8', Rust: '#f07050', Java: '#e8a24a',
-  'C++': '#e05080', Ruby: '#d94040', Swift: '#f05c30',
-  Kotlin: '#b06cff', PHP: '#9090e0', 'C#': '#68c060',
-  Scala: '#d04040', Haskell: '#9060c8',
-}
-const DEFAULT_COLOR = '#aabbcc'
+import { getLanguageColor } from '@/utils/physics'
 
 function trendLabel(delta: number) {
   if (delta > 15) return { text: '🔥 급등',  cls: 'text-orange-400' }
@@ -61,7 +53,7 @@ export default function Tooltip() {
 
   const repo      = hoveredRepoId ? repositories.find((r) => r.id === hoveredRepoId) : null
   const score     = hoveredRepoId ? scores[hoveredRepoId] : undefined
-  const langColor = repo?.language ? (LANGUAGE_COLORS[repo.language] ?? DEFAULT_COLOR) : DEFAULT_COLOR
+  const langColor = getLanguageColor(repo?.language ?? null)
   const trend     = score ? trendLabel(score.trendDelta) : null
 
   return (
@@ -94,7 +86,9 @@ export default function Tooltip() {
               </div>
               <div className="text-center">
                 <p className="text-[9px] text-white/40 font-mono">Stars</p>
-                <p className="text-xs text-yellow-300 font-mono font-bold">{formatCount(repo.starCount)}</p>
+                <p className="text-xs text-yellow-300 font-mono font-bold">
+                  {repo.starCount != null ? formatCount(repo.starCount) : '—'}
+                </p>
               </div>
             </div>
           )}

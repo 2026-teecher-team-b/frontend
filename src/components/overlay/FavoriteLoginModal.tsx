@@ -7,9 +7,10 @@
 import { useEffect } from 'react'
 import { useUIStore } from '@/store/useUIStore'
 
+const API_BASE  = import.meta.env.VITE_API_BASE_URL ?? ''
 const OAUTH_URL = import.meta.env.DEV
-  ? 'http://localhost:8080/oauth2/authorization/github'
-  : '/oauth2/authorization/github'
+  ? '/oauth2/authorization/github'
+  : `${API_BASE}/oauth2/authorization/github`
 
 export default function FavoriteLoginModal() {
   const { isFavoriteLoginModalOpen, closeFavoriteLoginModal } = useUIStore()
