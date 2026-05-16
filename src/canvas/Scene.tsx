@@ -89,6 +89,7 @@ function GalaxyScene() {
 export default function Scene() {
   return (
     <Canvas
+      flat
       camera={{ position: [280, 60, 0], fov: 58, near: 0.1, far: 3000 }}
       gl={{ antialias: true, alpha: false }}
       style={{ background: '#01020a' }}
