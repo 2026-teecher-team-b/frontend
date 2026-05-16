@@ -117,6 +117,16 @@ export default function InstancedStarField() {
     curScale.current = new Float32Array(count)
     // count가 생기면 셰이더 재컴파일 카운터 리셋
     shaderBootFrames.current = 0
+
+    // count가 0→N으로 바뀔 때 instanceColor 버퍼 재초기화
+    // (마운트 시점에 count=0이면 useLayoutEffect([])가 효과 없으므로 여기서 보정)
+    const mesh = meshRef.current
+    if (mesh && count > 0) {
+      mesh.setColorAt(0, _white)
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+      if (mat) (mat as THREE.Material).needsUpdate = true
+    }
   }, [count])
 
   // ── 셰이더 USE_INSTANCING_COLOR 초기화 ──────────────────────────

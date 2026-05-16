@@ -39,10 +39,10 @@ export default function GalaxyStats() {
   if (stats.total === 0) return null
 
   return (
-    <div className="absolute bottom-20 left-4 z-20 font-mono select-none">
+    <div className="absolute bottom-6 right-4 z-20 font-mono select-none text-right">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 text-white/40 hover:text-white/70 transition-colors mb-1.5"
+        className="flex items-center justify-end gap-1.5 text-white/40 hover:text-white/70 transition-colors mb-1.5"
       >
         <span className="text-[10px]">{open ? '▼' : '▶'}</span>
         <span className="text-[9px] uppercase tracking-widest">Galaxy Stats</span>

@@ -69,22 +69,22 @@ export function scoreToEmissiveIntensity(healthScore: number): number {
 // ─────────────────────────────────────────────────────────────────
 
 export const LANGUAGE_COLORS: Record<string, string> = {
-  TypeScript:  '#4f8ef7',
-  JavaScript:  '#f7d44f',
-  Python:      '#4da8e0',
-  Go:          '#00d4c8',
-  Rust:        '#f07050',
-  Java:        '#e8a24a',
-  'C++':       '#e05080',
-  Ruby:        '#d94040',
-  Swift:       '#f05c30',
-  Kotlin:      '#b06cff',
-  PHP:         '#9090e0',
-  'C#':        '#68c060',
-  Scala:       '#d04040',
-  Haskell:     '#9060c8',
+  TypeScript:  '#60aaff',   // 선명한 파랑
+  JavaScript:  '#ffe033',   // 밝은 노랑
+  Python:      '#5dcbf5',   // 밝은 하늘색
+  Go:          '#00f0d8',   // 형광 청록
+  Rust:        '#ff7055',   // 밝은 주황-빨강
+  Java:        '#ffbf55',   // 밝은 주황
+  'C++':       '#ff5c8a',   // 핫핑크
+  Ruby:        '#ff5555',   // 밝은 빨강
+  Swift:       '#ff7a40',   // 밝은 오렌지
+  Kotlin:      '#cc88ff',   // 밝은 보라
+  PHP:         '#aaaaff',   // 라벤더
+  'C#':        '#80e080',   // 밝은 초록
+  Scala:       '#ff6666',   // 밝은 붉은빛
+  Haskell:     '#bb88ff',   // 연보라
 }
-export const DEFAULT_COLOR = '#aabbcc'
+export const DEFAULT_COLOR = '#ccd8ee'
 
 export function getLanguageColor(language: string | null): string {
   return language ? (LANGUAGE_COLORS[language] ?? DEFAULT_COLOR) : DEFAULT_COLOR

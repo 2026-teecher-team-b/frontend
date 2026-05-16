@@ -11,7 +11,7 @@
  * 엔드포인트: GET /repos/{owner}/{repo}/explain?q=...
  * 응답: { "repo": "...", "question": "...", "answer": "..." }
  */
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRagExplain } from '@/hooks/queries/useRagAnalysis'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
 
@@ -21,17 +21,37 @@ interface Props {
 }
 
 const DEFAULT_QUESTION = '이 저장소에 대해 설명해주세요'
+const TYPING_SPEED_MS = 14  // 글자 당 ms (빠를수록 빠르게)
 
 export default function RAGAnalysis({ owner, repo }: Props) {
   const [inputValue, setInputValue] = useState('')
   const [submittedQuestion, setSubmittedQuestion] = useState<string | null>(null)
+  const [displayedAnswer, setDisplayedAnswer] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const typewriterRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const { data, isLoading, isError } = useRagExplain(
     owner || null,
     repo  || null,
     submittedQuestion,
   )
+
+  // 타이핑 이펙트 — data가 바뀔 때마다 한 글자씩 표시
+  useEffect(() => {
+    if (typewriterRef.current) clearInterval(typewriterRef.current)
+    if (!data) { setDisplayedAnswer(''); return }
+    let idx = 0
+    setDisplayedAnswer('')
+    typewriterRef.current = setInterval(() => {
+      idx++
+      setDisplayedAnswer(data.slice(0, idx))
+      if (idx >= data.length) {
+        clearInterval(typewriterRef.current!)
+        typewriterRef.current = null
+      }
+    }, TYPING_SPEED_MS)
+    return () => { if (typewriterRef.current) clearInterval(typewriterRef.current) }
+  }, [data])
 
   const handleSubmit = () => {
     const q = inputValue.trim() || DEFAULT_QUESTION
@@ -62,10 +82,10 @@ export default function RAGAnalysis({ owner, repo }: Props) {
             onKeyDown={handleKeyDown}
             placeholder={submittedQuestion ?? DEFAULT_QUESTION}
             className="
-              flex-1 bg-white/4 border border-white/10 rounded-lg
-              px-3 py-1.5 text-[11px] font-mono text-white/70
-              placeholder:text-white/20
-              focus:outline-none focus:border-blue-400/40 focus:bg-white/6
+              flex-1 bg-black/60 border border-white/20 rounded-lg
+              px-3 py-1.5 text-[11px] font-mono text-white/90
+              placeholder:text-white/35
+              focus:outline-none focus:border-blue-400/60 focus:bg-black/70
               transition-all
             "
           />
@@ -121,9 +141,13 @@ export default function RAGAnalysis({ owner, repo }: Props) {
               Q. {submittedQuestion}
             </p>
           )}
-          {/* 답변 */}
+          {/* 답변 — 타이핑 이펙트 */}
           <p className="text-[11px] text-white/70 font-mono leading-relaxed whitespace-pre-wrap">
-            {data}
+            {displayedAnswer}
+            {/* 타이핑 중일 때 커서 깜빡임 */}
+            {displayedAnswer.length < (data?.length ?? 0) && (
+              <span className="inline-block w-[2px] h-[12px] bg-blue-400 ml-0.5 align-middle animate-pulse" />
+            )}
           </p>
           {/* 다른 질문하기 */}
           <button
