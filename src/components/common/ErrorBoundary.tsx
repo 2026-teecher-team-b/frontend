@@ -9,12 +9,13 @@
  *     <Scene />
  *   </ErrorBoundary>
  */
+import { type ReactElement, type ReactNode } from 'react'
 import * as Sentry from '@sentry/react'
 
 interface Props {
-  children: React.ReactNode
+  children: ReactNode
   /** 에러 발생 시 표시할 대체 UI. 없으면 기본 안내 화면 */
-  fallback?: React.ReactNode
+  fallback?: ReactElement
 }
 
 function DefaultFallback() {

@@ -25,15 +25,15 @@ Sentry.init({
   // 환경 구분
   environment: import.meta.env.MODE,
 
-  // 콘솔 에러도 Sentry에 브레드크럼으로 기록
+  // 일반 세션 10%, 에러 세션 100% 녹화
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+
   integrations: [
     Sentry.browserTracingIntegration(),
     Sentry.replayIntegration({
-      // 에러 세션의 100%, 일반 세션의 10% 녹화
-      maskAllText:     false,   // 텍스트 마스킹 끔 (민감 정보 없으므로)
-      blockAllMedia:   false,
-      sessionSampleRate:      0.1,
-      errorSampleRate:        1.0,
+      maskAllText:   false,  // 텍스트 마스킹 끔 (민감 정보 없으므로)
+      blockAllMedia: false,
     }),
   ],
 })
