@@ -52,6 +52,13 @@ class PhysicsStore {
   entries = new Map<number, PhysicsEntry>()
 
   /**
+   * Web Worker 연동용 콜백.
+   * usePhysics에서 주입 — register/unregister 시 Worker에 메시지 전달.
+   */
+  onRegister:   ((entry: PhysicsEntry) => void) | null = null
+  onUnregister: ((repoId: number)      => void) | null = null
+
+  /**
    * Star 마운트 시 호출 — 초기 위치와 언어로 엔트리 생성.
    * activityScore는 초기 Y 위치 계산에 사용.
    */
@@ -74,7 +81,7 @@ class PhysicsStore {
 
     const [ix, iy, iz] = funnelPosition(activityScore, theta0)
 
-    this.entries.set(repoId, {
+    const entry: PhysicsEntry = {
       repoId,
       language,
       position:   new THREE.Vector3(ix, iy, iz),
@@ -84,7 +91,9 @@ class PhysicsStore {
       noisePhase,
       object:     null,
       velocity:   new THREE.Vector3(0, 0, 0), // 레거시
-    })
+    }
+    this.entries.set(repoId, entry)
+    this.onRegister?.(entry)
   }
 
   /** group/mesh ref가 준비된 후 호출 */
@@ -96,6 +105,7 @@ class PhysicsStore {
   /** Star 언마운트 시 정리 */
   unregister(repoId: number): void {
     this.entries.delete(repoId)
+    this.onUnregister?.(repoId)
   }
 
   /** 전체 엔트리 배열 (물리 루프용) */
