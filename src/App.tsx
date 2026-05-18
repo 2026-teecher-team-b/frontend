@@ -7,6 +7,7 @@ import type { Repository, RepoScore } from '@/types/github'
 import { useInterval } from '@/hooks/useInterval'
 import { timeSince } from '@/utils/format'
 // ── 2D UI 컴포넌트 ──────────────────────────────────────────────────
+import ErrorBoundary from '@/components/common/ErrorBoundary'
 import SidePanel from '@/components/panel/SidePanel'
 import Tooltip from '@/components/overlay/Tooltip'
 import Legend from '@/components/overlay/Legend'
@@ -282,8 +283,20 @@ export default function App() {
 
   return (
     <div className="relative w-full h-full">
-      {/* ── 3D 캔버스 ── */}
-      <Scene />
+      {/* ── 3D 캔버스 — WebGL 에러 격리 ── */}
+      <ErrorBoundary
+        fallback={
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#01020a] text-white/50 font-mono gap-3">
+            <span className="text-3xl">🌌</span>
+            <p className="text-xs">WebGL 초기화에 실패했습니다.</p>
+            <button onClick={() => window.location.reload()} className="text-xs underline hover:text-white/80 transition-colors">
+              새로고침
+            </button>
+          </div>
+        }
+      >
+        <Scene />
+      </ErrorBoundary>
 
       {/* ── 상태 표시 (좌상단) ── */}
       <div className="absolute top-4 left-4 text-xs text-white/40 font-mono pointer-events-none z-10 flex items-center gap-2">
