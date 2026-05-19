@@ -33,7 +33,7 @@ const THROAT_R   =    4
 const RIM_R      =  195
 const EXPONENT   =  0.52
 const FUNNEL_LERP_SPEED = 0.028
-const BASE_THETA_SPEED  = 0.22
+const BASE_THETA_SPEED  = 0.06
 const BH_THETA_MULT     = 4.5
 const SURFACE_NOISE_AMP = 6.0
 

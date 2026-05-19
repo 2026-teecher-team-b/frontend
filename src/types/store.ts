@@ -75,6 +75,7 @@ export interface UIActions {
   setFilterMode:     (mode: FilterMode) => void
   toggleFavorite:    (repoId: number) => void
   isFavorite:        (repoId: number) => boolean
+  loadFavorites:     () => void
 
   setUser: (user: UserInfo | null) => void
 

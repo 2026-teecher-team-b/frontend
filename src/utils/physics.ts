@@ -124,7 +124,7 @@ export const EXPONENT  =  0.52
 /** Y축 lerp 속도 (클수록 빠르게 목표 Y로 이동) */
 export const FUNNEL_LERP_SPEED = 0.028
 /** 수평 회전 기본 속도 (rad/s) */
-export const BASE_THETA_SPEED  = 0.22
+export const BASE_THETA_SPEED  = 0.06
 /** 블랙홀 회전 배율 */
 export const BH_THETA_MULT     = 4.5
 /** 표면 위아래 약간의 노이즈 진폭 */

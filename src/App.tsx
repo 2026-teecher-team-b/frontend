@@ -168,7 +168,7 @@ interface RepoListItemDto {
  */
 export default function App() {
   const { setRepositories, setScores, setConnected, setLastUpdatedAt, isConnected, lastUpdatedAt } = useGalaxyStore()
-  const { setUser, showToast } = useUIStore()
+  const { setUser, showToast, loadFavorites } = useUIStore()
 
   // ── 랜딩 페이지 표시 여부 ─────────────────────────────────────
   const [showLanding, setShowLanding] = useState(() => {
@@ -263,9 +263,14 @@ export default function App() {
   // ── 로그인 사용자 정보 — GET /auth/me ────────────────────────
   useEffect(() => {
     apiClient.get('/auth/me')
-      .then((res) => { if (res.data?.githubLogin) setUser(res.data) })
+      .then((res) => {
+        if (res.data?.githubLogin) {
+          setUser(res.data)
+          loadFavorites() // 로그인 확인 후 DB에서 즐겨찾기 목록 로드
+        }
+      })
       .catch(() => { /* 미로그인(401) → 무시 */ })
-  }, [setUser])
+  }, [setUser, loadFavorites])
 
   // ── 랜딩 → 메인 전환 ─────────────────────────────────────────
   const handleEnterGalaxy = () => {

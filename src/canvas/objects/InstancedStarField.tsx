@@ -63,7 +63,7 @@ const MAX_INSTANCES = 2000
  * MeshBasicMaterial은 emissive 글로우가 없으므로 카메라(~280 units)에서
  * 선명하게 보이려면 scoreToRadius 결과값을 크게 키워야 함.
  */
-const STAR_SCALE = 8.0
+const STAR_SCALE = 5.0
 
 // ── 재사용 Three.js 객체 (GC 방지) ─────────────────────────────────
 const _mat   = new THREE.Matrix4()
@@ -204,9 +204,9 @@ export default function InstancedStarField() {
 
       // ── 자전 ─────────────────────────────────────────────────
       const speedMult = isBlackHole ? 4.5 : 1.0
-      rotY.current[i] += dt * rotSpeeds[i] * speedMult * 0.14
-      rotZ.current[i] += dt * rotSpeeds[i] * speedMult * 0.07
-      if (isBlackHole) rotX.current[i] += dt * 0.5
+      rotY.current[i] += dt * rotSpeeds[i] * speedMult * 0.04
+      rotZ.current[i] += dt * rotSpeeds[i] * speedMult * 0.02
+      if (isBlackHole) rotX.current[i] += dt * 0.15
 
       _euler.set(rotX.current[i], rotY.current[i], rotZ.current[i])
       _quat.setFromEuler(_euler)

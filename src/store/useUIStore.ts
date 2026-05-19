@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { UIStore } from '@/types/store'
+import { apiClient } from '@/api/axios'
 
 export const useUIStore = create<UIStore>((set, get) => ({
   // ── State ──
@@ -39,6 +40,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   /**
    * 즐겨찾기 토글.
    * 비로그인 상태에서 클릭하면 로그인 안내 모달을 열고 종료.
+   * 로그인 상태: Optimistic update 후 백엔드 API 호출 (실패 시 롤백).
    */
   toggleFavorite: (repoId) => {
     const { user, favorites } = get()
@@ -47,14 +49,42 @@ export const useUIStore = create<UIStore>((set, get) => ({
       return
     }
     const already = favorites.includes(repoId)
+    // Optimistic update
     set({
       favorites: already
         ? favorites.filter((id) => id !== repoId)
         : [...favorites, repoId],
     })
+    // 백엔드 동기화 (실패 시 롤백)
+    if (already) {
+      apiClient.delete(`/users/me/favorites/${repoId}`).catch(() => {
+        set((s) => ({ favorites: [...s.favorites, repoId] }))
+      })
+    } else {
+      apiClient.post(`/users/me/favorites/${repoId}`).catch(() => {
+        set((s) => ({ favorites: s.favorites.filter((id) => id !== repoId) }))
+      })
+    }
   },
 
   isFavorite: (repoId) => get().favorites.includes(repoId),
+
+  /**
+   * DB에서 즐겨찾기 목록 로드.
+   * 로그인 성공 직후 호출.
+   */
+  loadFavorites: () => {
+    apiClient
+      .get<{ favoriteId: number; repoId: number; createdAt: string }[]>(
+        '/users/me/favorites',
+      )
+      .then((res) => {
+        set({ favorites: res.data.map((f) => f.repoId) })
+      })
+      .catch(() => {
+        // 로드 실패 시 무시 (빈 상태 유지)
+      })
+  },
 
   // ── 사용자 ──────────────────────────────────────────────────────
   setUser: (user) => set({ user }),
