@@ -63,7 +63,7 @@ const MAX_INSTANCES = 2000
  * MeshBasicMaterial은 emissive 글로우가 없으므로 카메라(~280 units)에서
  * 선명하게 보이려면 scoreToRadius 결과값을 크게 키워야 함.
  */
-const STAR_SCALE = 5.0
+const STAR_SCALE = 8.0
 
 // ── 재사용 Three.js 객체 (GC 방지) ─────────────────────────────────
 const _mat   = new THREE.Matrix4()
@@ -277,7 +277,12 @@ export default function InstancedStarField() {
         onPointerOut={handlePointerOut}
         frustumCulled={false}
       >
-        <meshBasicMaterial vertexColors />
+        {/*
+          vertexColors 제거 — ExtrudeGeometry에 color 속성이 없어서
+          vertexColors=true 시 vColor=(0,0,0) → instanceColor 곱해도 검은색.
+          vertexColors 없으면 base = material.color(흰색) × instanceColor = 언어 색상 ✓
+        */}
+        <meshBasicMaterial color="white" />
       </instancedMesh>
 
       {blackHoleRepos.map((repo) => (
