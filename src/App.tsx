@@ -1,5 +1,4 @@
-import { useEffect, useCallback, useState } from 'react'
-import Scene from '@/canvas/Scene'
+import { lazy, Suspense, useEffect, useCallback, useState } from 'react'
 import FrameMonitor from '@/canvas/effects/FrameMonitor'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { apiClient } from '@/api/axios'
@@ -20,6 +19,8 @@ import GalaxyStats from '@/components/overlay/GalaxyStats'
 import ToastNotification from '@/components/overlay/ToastNotification'
 import LandingPage from '@/pages/LandingPage'
 import { useUIStore } from '@/store/useUIStore'
+
+const Scene = lazy(() => import('@/canvas/Scene'))
 
 /** 폴링 간격: 5분 (스케줄러 갱신 주기와 맞춤) */
 const POLL_INTERVAL_MS = 5 * 60 * 1000
@@ -300,7 +301,9 @@ export default function App() {
           </div>
         }
       >
-        <Scene />
+        <Suspense fallback={null}>
+          <Scene />
+        </Suspense>
       </ErrorBoundary>
 
       {/* ── 상태 표시 (좌상단) ── */}
