@@ -243,7 +243,10 @@ export default function App() {
   }, [setRepositories, setScores, setConnected, setLastUpdatedAt, showToast])
 
   // ── 초기 로드 ─────────────────────────────────────────────────
-  useEffect(() => { loadRepos(false) }, [loadRepos])
+  useEffect(() => { 
+    if (showLanding) return
+    loadRepos(false)
+  }, [showLanding, loadRepos])
 
   // ── 5분 폴링 ─────────────────────────────────────────────────
   useInterval(() => loadRepos(true), POLL_INTERVAL_MS)
@@ -263,6 +266,8 @@ export default function App() {
 
   // ── 로그인 사용자 정보 — GET /auth/me ────────────────────────
   useEffect(() => {
+    if (showLanding) return
+
     apiClient.get('/auth/me')
       .then((res) => {
         if (res.data?.githubLogin) {
@@ -271,7 +276,7 @@ export default function App() {
         }
       })
       .catch(() => { /* 미로그인(401) → 무시 */ })
-  }, [setUser, loadFavorites])
+  }, [showLanding, setUser, loadFavorites])
 
   // ── 랜딩 → 메인 전환 ─────────────────────────────────────────
   const handleEnterGalaxy = () => {
