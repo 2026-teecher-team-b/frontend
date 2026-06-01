@@ -1,8 +1,8 @@
 # 깃허브 갤럭시 (GitHub Galaxy)
 
-GitHub 오픈소스 저장소를 **3D 웜홀 은하**로 시각화하는 인터랙티브 웹 애플리케이션입니다.
+GitHub 오픈소스 저장소를 **3D 나선 은하**로 시각화하는 인터랙티브 웹 애플리케이션입니다.
 
-별 하나 = 레포 하나. 활동 점수가 높을수록 은하 상단에, 낮을수록 블랙홀로 빨려드는 깔때기 구조입니다.  
+별 하나 = 레포 하나. 언어별로 나선팔이 나뉘고, 활동 점수가 높을수록 은하 코어 근처에, 낮을수록 외곽으로 배치됩니다.  
 별을 클릭하면 AI 분석, 점수 차트, 즐겨찾기가 담긴 사이드 패널이 열립니다.
 
 ---
@@ -11,11 +11,11 @@ GitHub 오픈소스 저장소를 **3D 웜홀 은하**로 시각화하는 인터�
 
 | 기능 | 설명 |
 |------|------|
-| **3D 웜홀 시각화** | 저장소 하나 = 별 하나. 활성도 → Y 위치, 건강도 → 크기·밝기로 매핑 |
-| **깔때기 물리 엔진** | 활성도 변화에 따라 별이 실시간 이동. Web Worker 기반 O(n) 처리 |
-| **언어 색상** | 저장소 주 언어별 고정 색상 (InstancedMesh 단일 draw call) |
-| **블랙홀** | 건강도 < 2 → 블랙홀 구역으로 분류 |
-| **GalaxyCore** | 은하 중심부 렌더링 (글로우 효과) |
+| **3D 나선 은하 시각화** | 저장소 하나 = 별 하나. 언어별 나선팔 배치, 활성도 → 반지름(내부=활발·외부=비활성), 별 크기 → 인기도 |
+| **나선팔 물리 엔진** | 활성도 변화에 따라 별이 나선팔 위를 실시간 공전. Web Worker 기반 O(n) 처리 |
+| **언어별 나선팔** | 14개 언어 각각 고정 팔 각도 (TypeScript 0°, JavaScript 26°, Python 52°…) |
+| **블랙홀** | 건강도 < 2 → 나선팔을 따라 은하 중심으로 빨려드는 블랙홀로 분류 |
+| **GalaxyCore** | 은하 핵 + 동심원 링 + 나선팔 가이드 렌더링 |
 | **360° 카메라** | 구면 좌표계 기반 오비탈 카메라. 드래그·스크롤·터치 지원 |
 | **2D/3D 뷰 전환** | ViewToggle로 2D 플랫 뷰 / 3D 은하 뷰 전환 |
 | **검색** | 저장소명·언어 실시간 검색 |
@@ -65,27 +65,39 @@ GitHub 오픈소스 저장소를 **3D 웜홀 은하**로 시각화하는 인터�
 
 ---
 
-## 웜홀 수학 (핵심 개념)
+## 은하 수학 (핵심 개념)
 
-별의 Y좌표(높이)는 활동 점수로 결정됩니다:
-
-```
-activityToY(score):
-  y = THROAT_Y + (RIM_Y - THROAT_Y) × (score / 100)
-
-  THROAT_Y = -160  (깔때기 목, 블랙홀 구역)
-  RIM_Y    =  120  (깔때기 입구, 트렌딩 구역)
-```
-
-해당 Y에서의 깔때기 반지름:
+별의 반지름은 활동 점수로 결정됩니다 (활발할수록 코어 근처):
 
 ```
-funnelRadius(y):
-  t = (y - THROAT_Y) / (RIM_Y - THROAT_Y)   (0 ~ 1)
-  r = THROAT_R + (RIM_R - THROAT_R) × t^EXPONENT
+activityToGalaxyRadius(score):
+  r = GALAXY_R_OUTER - (GALAXY_R_OUTER - GALAXY_R_INNER) × (score / 100)
 
-  THROAT_R = 4    RIM_R = 195    EXPONENT = 0.52
-  → 목은 좁고 입구는 급격히 넓어지는 형태
+  GALAXY_R_INNER = 22   (코어 근처, 가장 활발한 레포)
+  GALAXY_R_OUTER = 185  (외곽, 비활성 레포)
+```
+
+나선팔 위의 각도 (로그 나선):
+
+```
+spiralTheta(armAngle, r, orbitAngle):
+  θ = armAngle + SPIRAL_K × ln(r / GALAXY_R_INNER + 1) + orbitAngle
+
+  SPIRAL_K = 0.55   → 나선의 감김 강도
+  armAngle = 언어별 고정 각도 (TypeScript 0°, JavaScript 26°, Python 52°…)
+  orbitAngle = repoId 기반 결정론적 초기값, 시간에 따라 서서히 공전
+```
+
+최종 3D 좌표:
+
+```
+galaxyPosition(activityScore, armAngle, orbitAngle, time, noisePhase):
+  r = activityToGalaxyRadius(activityScore)
+  θ = spiralTheta(armAngle, r, orbitAngle)
+  y = GALAXY_H_AMP × sin(time × 0.35 + noisePhase) × rNorm   (디스크 두께)
+  → [r·cos θ, y, r·sin θ]
+
+  GALAXY_H_AMP = 14   → 디스크 최대 두께 (내부일수록 두꺼움)
 ```
 
 블랙홀 판정: `healthScore < 2`
@@ -98,9 +110,9 @@ funnelRadius(y):
 백엔드 GET /repos (5분 폴링)
   → App.tsx: normalizeScores() — p5~p95 백분위 정규화
   → useGalaxyStore: repositories[] + scores{}
-      → physicsStore (모듈 싱글톤): 물리 엔트리 등록
+      → physicsStore (모듈 싱글톤): 언어·activityScore 기반 나선팔 엔트리 등록
       → InstancedStarField: InstancedMesh로 draw call 1회 처리
-      → usePhysics (Web Worker): 매 프레임 위치 계산 → physicsStore 갱신
+      → usePhysics (Web Worker): 매 프레임 orbitAngle·반지름 갱신 → physicsStore 업데이트
 ```
 
 ```
@@ -120,7 +132,7 @@ useGalaxyStore         useUIStore
   (overlay/panel)     (R3F + Three.js)
                            │
                      physicsStore
-                     (모듈 싱글톤)
+                     (모듈 싱글톤 — orbitAngle·currentR)
                            │
                    physics.worker.ts
                   (Web Worker — zero-copy Float32Array)
@@ -153,7 +165,7 @@ frontend/
 │   │       ├── InfiniteGrid.tsx      # 무한 격자
 │   │       ├── InstancedStarField.tsx # 별 전체 단일 InstancedMesh (MAX 2000)
 │   │       ├── StarConnections.tsx   # 같은 언어 별 연결선
-│   │       └── WormholeFunnel.tsx    # 깔때기 격자 + 빛 고리
+│   │       └── WormholeFunnel.tsx    # 은하 외곽 빛 고리 이펙트
 │   │
 │   ├── components/                   # ── 2D UI 레이어 ───────────
 │   │   ├── common/
@@ -198,7 +210,7 @@ frontend/
 │   │   └── canvas.ts
 │   │
 │   ├── utils/
-│   │   ├── physics.ts                 # 깔때기 수학 (activityToY, funnelRadius)
+│   │   ├── physics.ts                 # 은하 수학 (galaxyPosition, spiralTheta, activityToGalaxyRadius)
 │   │   ├── format.ts                  # 숫자·날짜 포맷
 │   │   └── vitals.ts                  # Web Vitals 리포팅
 │   │
@@ -316,9 +328,9 @@ pnpm lint
 | 1~2주차 | 프로젝트 셋업, 3D 렌더링 기초 | ✅ 완료 |
 | 3~4주차 | 물리 엔진, 점수 시각화 | ✅ 완료 |
 | 5~6주차 | 카메라, 2D 오버레이, 사이드 패널 | ✅ 완료 |
-| 7~8주차 | 블랙홀 이펙트, RAG AI 분석, 웜홀 디자인 | ✅ 완료 |
+| 7~8주차 | 블랙홀 이펙트, RAG AI 분석 | ✅ 완료 |
 | 9~10주차 | GitHub OAuth, 즐겨찾기 DB 연동, Sentry 모니터링 | ✅ 완료 |
-| 11~12주차 | HUD UI 리디자인, 성능 최적화 (lazy loading, InstancedMesh), GalaxyCore·ViewToggle 추가 | ✅ 완료 |
+| 11~12주차 | 나선 은하 디스크 전환 (언어별 나선팔), HUD UI 리디자인, 성능 최적화 (lazy loading, InstancedMesh), GalaxyCore·ViewToggle 추가 | ✅ 완료 |
 
 ---
 
