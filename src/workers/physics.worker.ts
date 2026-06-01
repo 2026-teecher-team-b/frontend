@@ -1,53 +1,44 @@
 /**
- * physics.worker.ts — 깔때기 물리 시뮬레이션 Web Worker
+ * physics.worker.ts — 나선 은하 물리 시뮬레이션 Web Worker  v4
  *
- * 메인 스레드에서 분리해 렌더링 전용 메인 스레드의 scripting 부담 감소.
+ * v4 변경: 웜홀 깔때기 → 나선 은하 디스크
+ *  - 별들이 언어별 나선팔에 배치
+ *  - activityScore → 반지름 (활성 = 내부, 비활성 = 외부)
+ *  - Kepler 궤도 속도 (내부 = 빠름, 외부 = 느림)
+ *  - 블랙홀: 반지름이 코어로 lerp (나선팔 따라 안으로 빨려들어감)
  *
  * 프로토콜 (메인 → Worker):
- *   { type: 'register',      repoId, activityScore }
- *   { type: 'unregister',    repoId }
- *   { type: 'updateScores',  scores: Record<number, { activityScore, healthScore }> }
- *   { type: 'tick',          dt: number, time: number }
+ *   { type: 'register',     repoId, activityScore, armAngle }
+ *   { type: 'unregister',   repoId }
+ *   { type: 'updateScores', scores: Record<number, { activityScore, healthScore }> }
+ *   { type: 'tick',         dt: number, time: number }
  *
  * 프로토콜 (Worker → 메인):
- *   { type: 'positions',     data: Float32Array }  — [repoId, x, y, z, ...] 반복
- *   ArrayBuffer transfer로 복사 없이 메인 스레드로 이전 (zero-copy)
- *
- * 설계 원칙:
- *  - Three.js 의존 없음 (순수 math만 사용)
- *  - 물리 상태(theta, currentY 등)를 Worker 내부에서 완전히 관리
- *  - postMessage 직렬화 비용 최소화:
- *      · scores는 변경 시에만 전송 (매 프레임 아님)
- *      · tick 메시지는 dt + time만 전송 (경량)
- *      · 결과는 ArrayBuffer transfer (zero-copy)
+ *   { type: 'positions',    data: Float32Array }  — [repoId, x, y, z, ...] zero-copy
  */
 
 /// <reference lib="webworker" />
 
-// ── 물리 상수 (physics.ts 와 동일하게 유지) ─────────────────────────
-// Worker는 Three.js를 import할 수 없으므로 상수를 직접 정의.
+// ── 물리 상수 (physics.ts 와 동일) ──────────────────────────────────
 const BLACKHOLE_HEALTH_THRESHOLD = 2
-const THROAT_Y   = -160
-const RIM_Y      =  120
-const THROAT_R   =    4
-const RIM_R      =  195
-const EXPONENT   =  0.52
-const FUNNEL_LERP_SPEED = 0.028
-const BASE_THETA_SPEED  = 0.06
-const BH_THETA_MULT     = 4.5
-const SURFACE_NOISE_AMP = 6.0
+const GALAXY_R_INNER   = 22
+const GALAXY_R_OUTER   = 185
+const GALAXY_H_AMP     = 14
+const SPIRAL_K         = 0.55
+const BASE_ORBIT_SPEED = 0.038
+const GALAXY_R_LERP    = 0.012
+const BH_R_PULL        = 0.007
+const BH_THETA_MULT    = 4.2
 
-function activityToY(activityScore: number): number {
-  const t = Math.max(0, Math.min(100, activityScore)) / 100
-  return THROAT_Y + (RIM_Y - THROAT_Y) * t
+function activityToGalaxyRadius(activity: number): number {
+  const t = Math.max(0, Math.min(100, activity)) / 100
+  return GALAXY_R_OUTER - (GALAXY_R_OUTER - GALAXY_R_INNER) * t
 }
 
-function funnelRadius(y: number): number {
-  const t = Math.max(0, Math.min(1, (y - THROAT_Y) / (RIM_Y - THROAT_Y)))
-  return THROAT_R + (RIM_R - THROAT_R) * Math.pow(t, EXPONENT)
+function spiralTheta(armAngle: number, r: number, orbitAngle: number): number {
+  return armAngle + SPIRAL_K * Math.log(Math.max(1, r / GALAXY_R_INNER) + 1) + orbitAngle
 }
 
-/** physicsStore.ts 와 동일한 결정론적 시드 함수 */
 function seeded(id: number, salt: number): number {
   return Math.abs(Math.sin(id * 127.1 + salt * 311.7) * 43758.5453) % 1
 }
@@ -55,10 +46,11 @@ function seeded(id: number, salt: number): number {
 // ── Worker 내부 물리 상태 ────────────────────────────────────────────
 interface WorkerEntry {
   repoId:     number
-  theta:      number
-  thetaSpeed: number
-  currentY:   number
-  noisePhase: number
+  orbitAngle: number   // 현재 궤도 각도 (지속 증가)
+  thetaSpeed: number   // 속도 배율 (0.7 ~ 1.3)
+  currentR:   number   // 현재 반지름 (목표 R로 lerp 중)
+  noisePhase: number   // 디스크 높이 노이즈 위상
+  armAngle:   number   // 나선팔 기준 각도 (고정)
 }
 
 interface ScoreData {
@@ -75,69 +67,78 @@ self.onmessage = (event: MessageEvent) => {
 
   switch (msg.type) {
 
-    // 새 별 등록
     case 'register': {
       const repoId       = msg.repoId       as number
       const activityScore = msg.activityScore as number ?? 50
+      const armAngle     = msg.armAngle     as number ?? 0
       if (entries.has(repoId)) return
+
+      const initR = activityToGalaxyRadius(activityScore)
       entries.set(repoId, {
         repoId,
-        theta:      seeded(repoId, 1) * Math.PI * 2,
-        thetaSpeed: 0.12 + seeded(repoId, 2) * 0.23,
-        currentY:   activityToY(activityScore),
+        orbitAngle: seeded(repoId, 1) * Math.PI * 2,
+        thetaSpeed: 0.7 + seeded(repoId, 2) * 0.6,   // 0.7 ~ 1.3
+        currentR:   initR,
         noisePhase: seeded(repoId, 3) * Math.PI * 2,
+        armAngle,
       })
       break
     }
 
-    // 별 제거
     case 'unregister': {
       entries.delete(msg.repoId as number)
       break
     }
 
-    // 점수 업데이트 (변경 시에만 전송되므로 매 프레임 호출 아님)
     case 'updateScores': {
       scores = msg.scores as Record<number, ScoreData>
       break
     }
 
-    // 물리 시뮬레이션 1 tick
     case 'tick': {
       const dt   = msg.dt   as number
       const time = msg.time as number
 
-      // Float32Array: [repoId, x, y, z] × entries.size
-      // Transferable로 zero-copy 전송 (ArrayBuffer 소유권 이전)
       const buf = new Float32Array(entries.size * 4)
       let i = 0
 
       for (const e of entries.values()) {
-        const score      = scores[e.repoId]
-        const activity   = score?.activityScore ?? 50
+        const score       = scores[e.repoId]
+        const activity    = score?.activityScore ?? 50
         const isBlackHole = (score?.healthScore ?? 50) < BLACKHOLE_HEALTH_THRESHOLD
 
-        // Y 위치 lerp (블랙홀은 3.5× 속도로 목으로 빨려 들어감)
-        const targetY   = activityToY(activity)
-        const lerpSpeed = isBlackHole ? FUNNEL_LERP_SPEED * 3.5 : FUNNEL_LERP_SPEED
-        e.currentY += (targetY - e.currentY) * Math.min(lerpSpeed * 60 * dt, 1)
+        // ── 1. 반지름 업데이트 ────────────────────────────────────
+        const targetR = activityToGalaxyRadius(activity)
+        const rLerpSpeed = isBlackHole ? GALAXY_R_LERP * 3.5 : GALAXY_R_LERP
+        e.currentR += (targetR - e.currentR) * Math.min(rLerpSpeed * 60 * dt, 1)
 
-        // 수평 회전
-        const thetaMult = isBlackHole ? BH_THETA_MULT : 1.0
-        e.theta += e.thetaSpeed * BASE_THETA_SPEED * thetaMult * dt
+        // 블랙홀: 코어로 추가 당김 (나선팔 따라 안으로 빨려 들어감)
+        if (isBlackHole) {
+          e.currentR += (GALAXY_R_INNER * 0.4 - e.currentR) * BH_R_PULL
+        }
 
-        // 표면 노이즈 (부드러운 오르내림)
-        const noise = Math.sin(time * 0.6 + e.noisePhase) * SURFACE_NOISE_AMP
-        const y     = e.currentY + noise
-        const r     = funnelRadius(y)
+        const r = Math.max(GALAXY_R_INNER * 0.3, e.currentR)
+
+        // ── 2. 궤도 각도 업데이트 (Kepler 속도) ──────────────────
+        // 내부 = 빠름 (실제 은하처럼)
+        const keplerFactor = Math.sqrt(GALAXY_R_INNER / r)
+        const bhMult = isBlackHole ? BH_THETA_MULT : 1.0
+        e.orbitAngle += e.thetaSpeed * BASE_ORBIT_SPEED * keplerFactor * bhMult * dt
+
+        // ── 3. 3D 위치 계산 ───────────────────────────────────────
+        const theta = spiralTheta(e.armAngle, r, e.orbitAngle)
+
+        // 디스크 두께: 내부일수록 두꺼움 (rNorm: 내부=1, 외부=0)
+        const rNorm = 1 - (r - GALAXY_R_INNER) / (GALAXY_R_OUTER - GALAXY_R_INNER)
+        const y = GALAXY_H_AMP * Math.sin(time * 0.35 + e.noisePhase) * Math.max(0, rNorm)
 
         buf[i++] = e.repoId
-        buf[i++] = r * Math.cos(e.theta)
+        buf[i++] = r * Math.cos(theta)
         buf[i++] = y
-        buf[i++] = r * Math.sin(e.theta)
+        buf[i++] = r * Math.sin(theta)
       }
 
-      // ArrayBuffer transfer — 복사 없이 메인 스레드로 이전
+      // zero-copy transfer
       self.postMessage({ type: 'positions', data: buf }, [buf.buffer])
       break
     }

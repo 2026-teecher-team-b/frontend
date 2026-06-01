@@ -1,43 +1,58 @@
 /**
- * LandingPage.tsx — GitHub Galaxy 소개 + 온보딩
- *
- * 첫 방문자에게만 표시 (localStorage "galaxy-visited" 기준)
- * "탐험 시작하기" 클릭 → 메인 3D 씬으로 진입
+ * LandingPage.tsx — GitHub Galaxy 온보딩 (HUD / Cyber 리디자인)
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Props {
   onEnter: () => void
 }
 
+const BOOT_LINES = [
+  { label: '별 필드 렌더러',   status: '준비',  color: '#00d4ff' },
+  { label: '저장소 매트릭스', status: '로드됨', color: '#00d4ff' },
+  { label: '은하 물리 엔진',  status: '정상',  color: '#00ff88' },
+  { label: 'AI RAG 엔진',     status: '대기',  color: '#ffaa00' },
+]
+
 const FEATURES = [
   {
-    icon: '🌌',
-    title: '3D 은하 시각화',
-    desc: '수백 개의 GitHub 저장소가 살아있는 별이 되어 웜홀 은하 속을 유영합니다.',
+    icon: '◈',
+    title: '3D 별 시각화',
+    desc: 'GitHub 저장소를 나선 은하의 살아있는 별로 렌더링합니다.',
   },
   {
-    icon: '⚡',
-    title: '활동 기반 배치',
-    desc: '활발한 저장소는 은하 상단에, 방치된 저장소는 블랙홀로 빨려들어갑니다.',
+    icon: '◈',
+    title: '활동 기반 궤도',
+    desc: '활발한 저장소는 은하 핵 가까이, 비활성은 외곽으로 이동합니다.',
   },
   {
-    icon: '🤖',
+    icon: '◈',
     title: 'AI 저장소 분석',
-    desc: 'RAG 기반 AI가 저장소를 분석하고 자연어 질문에 답해줍니다.',
+    desc: 'RAG 기반 AI가 모든 저장소에 대한 자연어 질문에 답합니다.',
   },
   {
-    icon: '⭐',
-    title: '즐겨찾기 & 탐험',
-    desc: '마음에 드는 저장소를 즐겨찾기에 추가하고 검색으로 빠르게 접근하세요.',
+    icon: '◈',
+    title: '즐겨찾기 & 검색',
+    desc: '저장소를 북마크하고 은하 전체에서 빠르게 검색하세요.',
   },
 ]
 
 export default function LandingPage({ onEnter }: Props) {
-  // 배경 별 캔버스 ref
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [bootPhase, setBootPhase] = useState(0)
 
-  // 배경 별 애니메이션 (Canvas 2D — Three.js 없이)
+  // Boot animation — stagger each status line
+  useEffect(() => {
+    let i = 0
+    const id = setInterval(() => {
+      i++
+      setBootPhase(i)
+      if (i >= BOOT_LINES.length) clearInterval(id)
+    }, 260)
+    return () => clearInterval(id)
+  }, [])
+
+  // Background star + grid canvas
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -51,13 +66,12 @@ export default function LandingPage({ onEnter }: Props) {
     resize()
     window.addEventListener('resize', resize)
 
-    // 별 파티클 생성
-    const stars = Array.from({ length: 220 }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      r: Math.random() * 1.4 + 0.3,
-      alpha: Math.random() * 0.7 + 0.1,
-      speed: Math.random() * 0.18 + 0.04,
+    const stars = Array.from({ length: 180 }, () => ({
+      x:     Math.random(),
+      y:     Math.random(),
+      r:     Math.random() * 1.1 + 0.2,
+      alpha: Math.random() * 0.45 + 0.08,
+      speed: Math.random() * 0.14 + 0.03,
       phase: Math.random() * Math.PI * 2,
     }))
 
@@ -65,14 +79,26 @@ export default function LandingPage({ onEnter }: Props) {
     let t = 0
 
     const draw = () => {
-      ctx.fillStyle = '#01020a'
+      ctx.fillStyle = '#000a18'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
+      // Grid lines
+      ctx.strokeStyle = 'rgba(0,212,255,0.028)'
+      ctx.lineWidth = 1
+      const g = 64
+      for (let x = 0; x < canvas.width; x += g) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke()
+      }
+      for (let y = 0; y < canvas.height; y += g) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke()
+      }
+
+      // Stars
       for (const s of stars) {
         const pulse = Math.sin(t * s.speed + s.phase) * 0.3 + 0.7
         ctx.beginPath()
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(160, 180, 255, ${s.alpha * pulse})`
+        ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(0,212,255,${(s.alpha * pulse * 0.65).toFixed(3)})`
         ctx.fill()
       }
 
@@ -88,89 +114,199 @@ export default function LandingPage({ onEnter }: Props) {
   }, [])
 
   return (
-    <div className="relative w-full h-full overflow-hidden font-mono select-none">
-      {/* ── 배경 별 캔버스 ─────────────────────────────────────── */}
+    <div
+      className="relative w-full h-full overflow-hidden select-none"
+      style={{ background: '#000a18' }}
+    >
+      {/* Background canvas */}
       <canvas ref={canvasRef} className="absolute inset-0 z-0" />
 
-      {/* ── 은하 중심 광원 글로우 ─────────────────────────────── */}
+      {/* Scan-line overlay */}
       <div
         className="absolute inset-0 z-0 pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(40,80,200,0.12) 0%, transparent 70%)',
+          background:
+            'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.055) 2px, rgba(0,0,0,0.055) 4px)',
         }}
       />
 
-      {/* ── 메인 컨텐츠 ──────────────────────────────────────── */}
-      <div className="relative z-10 flex flex-col items-center justify-center h-full px-6 text-center">
+      {/* Radial glow */}
+      <div
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(ellipse 55% 45% at 50% 58%, rgba(0,212,255,0.055) 0%, transparent 70%)',
+        }}
+      />
 
-        {/* ── 로고 / 타이틀 ────────────────────────────────────── */}
-        <div className="mb-3 flex items-center gap-3">
-          <span className="text-4xl" style={{ filter: 'drop-shadow(0 0 12px rgba(100,150,255,0.8))' }}>
-            🌌
-          </span>
-          <h1
-            className="text-3xl sm:text-4xl font-black tracking-tight text-white"
-            style={{ textShadow: '0 0 40px rgba(100,160,255,0.5)' }}
-          >
-            GitHub Galaxy
-          </h1>
+      {/* ── Main content ─────────────────────────────────────────── */}
+      <div className="relative z-10 flex flex-col items-center justify-center h-full px-4 text-center">
+
+        {/* ── Top badge ─────────────────────────────────────────── */}
+        <div
+          className="mb-6 flex items-center gap-2 text-[9px] tracking-[0.28em] uppercase"
+          style={{ color: 'rgba(0,212,255,0.38)' }}
+        >
+          <span style={{ color: 'rgba(0,212,255,0.25)' }}>◈</span>
+          <span>GITHUB.GALAXY</span>
+          <span style={{ color: 'rgba(0,212,255,0.18)' }}>//</span>
+          <span style={{ color: 'rgba(0,212,255,0.28)' }}>WEBGL COMMAND v1.0</span>
+          <span style={{ color: 'rgba(0,212,255,0.25)' }}>◈</span>
         </div>
 
-        {/* ── 서브타이틀 ─────────────────────────────────────── */}
-        <p className="text-white/50 text-sm sm:text-base mb-10 max-w-md leading-relaxed">
-          GitHub 저장소 생태계를 살아있는 3D 은하로 탐험하세요.
-          <br className="hidden sm:block" />
-          활동하는 별, 잠든 블랙홀, AI 분석까지.
+        {/* ── Title ─────────────────────────────────────────────── */}
+        <h1
+          className="text-4xl sm:text-5xl font-black tracking-[-0.01em] text-white mb-1.5"
+          style={{ textShadow: '0 0 40px rgba(0,212,255,0.32), 0 0 80px rgba(0,212,255,0.1)' }}
+        >
+          깃허브 갤럭시
+        </h1>
+        <p
+          className="text-[10px] tracking-[0.3em] mb-8"
+          style={{ color: 'rgba(0,212,255,0.38)' }}
+        >
+          오픈소스 저장소 은하 탐험
         </p>
 
-        {/* ── 기능 카드 그리드 ─────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10 max-w-2xl w-full">
+        {/* ── Boot sequence panel ───────────────────────────────── */}
+        <div className="mb-7 w-full max-w-sm">
+          <div
+            className="relative px-3.5 py-2.5"
+            style={{
+              background: 'rgba(0,10,24,0.82)',
+              border: '1px solid rgba(0,212,255,0.15)',
+            }}
+          >
+            {/* Corner brackets */}
+            <span className="absolute top-0 left-0 w-3 h-3 border-t border-l" style={{ borderColor: 'rgba(0,212,255,0.55)' }} />
+            <span className="absolute top-0 right-0 w-3 h-3 border-t border-r" style={{ borderColor: 'rgba(0,212,255,0.55)' }} />
+            <span className="absolute bottom-0 left-0 w-3 h-3 border-b border-l" style={{ borderColor: 'rgba(0,212,255,0.55)' }} />
+            <span className="absolute bottom-0 right-0 w-3 h-3 border-b border-r" style={{ borderColor: 'rgba(0,212,255,0.55)' }} />
+
+            <p
+              className="text-[9px] tracking-[0.22em] uppercase mb-2.5"
+              style={{ color: 'rgba(0,212,255,0.38)' }}
+            >
+              ▸ SYSTEM STATUS
+            </p>
+            <ul className="space-y-1.5">
+              {BOOT_LINES.map((line, i) => (
+                <li
+                  key={line.label}
+                  className="flex items-center justify-between text-[10px] transition-opacity duration-200"
+                  style={{ opacity: i < bootPhase ? 1 : 0 }}
+                >
+                  <span style={{ color: 'rgba(255,255,255,0.38)' }}>{line.label}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{
+                        backgroundColor: line.color,
+                        boxShadow: `0 0 6px ${line.color}`,
+                      }}
+                    />
+                    <span
+                      className="text-[9px] tracking-widest"
+                      style={{ color: line.color }}
+                    >
+                      {line.status}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* ── Feature grid ──────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-8 w-full max-w-2xl">
           {FEATURES.map(({ icon, title, desc }) => (
             <div
               key={title}
-              className="
-                bg-white/4 backdrop-blur-md
-                border border-white/8 rounded-xl
-                p-3 text-left
-                hover:bg-white/7 hover:border-white/14
-                transition-all duration-200
-              "
+              className="relative p-3 text-left transition-all duration-200 group"
+              style={{
+                background: 'rgba(0,13,32,0.60)',
+                border: '1px solid rgba(0,212,255,0.10)',
+              }}
+              onMouseEnter={(e) => {
+                ;(e.currentTarget as HTMLDivElement).style.borderColor =
+                  'rgba(0,212,255,0.26)'
+                ;(e.currentTarget as HTMLDivElement).style.background =
+                  'rgba(0,13,32,0.82)'
+              }}
+              onMouseLeave={(e) => {
+                ;(e.currentTarget as HTMLDivElement).style.borderColor =
+                  'rgba(0,212,255,0.10)'
+                ;(e.currentTarget as HTMLDivElement).style.background =
+                  'rgba(0,13,32,0.60)'
+              }}
             >
-              <div className="text-xl mb-2">{icon}</div>
-              <p className="text-white/80 text-[11px] font-bold mb-1 leading-tight">{title}</p>
-              <p className="text-white/35 text-[10px] leading-relaxed">{desc}</p>
+              {/* Micro corner brackets */}
+              <span className="absolute top-0 left-0 w-2 h-2 border-t border-l" style={{ borderColor: 'rgba(0,212,255,0.40)' }} />
+              <span className="absolute bottom-0 right-0 w-2 h-2 border-b border-r" style={{ borderColor: 'rgba(0,212,255,0.40)' }} />
+
+              <p className="text-lg mb-1.5" style={{ color: 'rgba(0,212,255,0.50)' }}>{icon}</p>
+              <p
+                className="text-[9px] font-bold tracking-widest uppercase mb-1"
+                style={{ color: 'rgba(255,255,255,0.75)' }}
+              >
+                {title}
+              </p>
+              <p className="text-[9px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                {desc}
+              </p>
             </div>
           ))}
         </div>
 
-        {/* ── CTA 버튼 ────────────────────────────────────────── */}
+        {/* ── CTA button ────────────────────────────────────────── */}
         <button
           onClick={onEnter}
-          className="
-            group relative
-            px-8 py-3.5
-            bg-blue-500/20 hover:bg-blue-500/30
-            border border-blue-400/40 hover:border-blue-300/60
-            rounded-2xl
-            text-sm font-bold text-blue-200 hover:text-white
-            transition-all duration-200
-            shadow-[0_0_30px_rgba(80,130,255,0.2)] hover:shadow-[0_0_40px_rgba(80,130,255,0.35)]
-          "
+          className="relative px-10 py-3 font-bold uppercase tracking-[0.22em] text-sm transition-all duration-200"
+          style={{
+            color: '#00d4ff',
+            border: '1px solid rgba(0,212,255,0.40)',
+            background: 'rgba(0,212,255,0.05)',
+            boxShadow: '0 0 24px rgba(0,212,255,0.08)',
+          }}
+          onMouseEnter={(e) => {
+            const el = e.currentTarget as HTMLButtonElement
+            el.style.color = '#ffffff'
+            el.style.borderColor = 'rgba(0,212,255,0.72)'
+            el.style.background = 'rgba(0,212,255,0.10)'
+            el.style.boxShadow = '0 0 32px rgba(0,212,255,0.18), inset 0 0 20px rgba(0,212,255,0.04)'
+          }}
+          onMouseLeave={(e) => {
+            const el = e.currentTarget as HTMLButtonElement
+            el.style.color = '#00d4ff'
+            el.style.borderColor = 'rgba(0,212,255,0.40)'
+            el.style.background = 'rgba(0,212,255,0.05)'
+            el.style.boxShadow = '0 0 24px rgba(0,212,255,0.08)'
+          }}
         >
-          <span className="mr-2">🚀</span>
-          은하 탐험 시작하기
-          <span className="ml-2 group-hover:translate-x-1 transition-transform inline-block">→</span>
+          {/* Button corner brackets */}
+          <span className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2" style={{ borderColor: 'rgba(0,212,255,0.65)' }} />
+          <span className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2" style={{ borderColor: 'rgba(0,212,255,0.65)' }} />
+          <span className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2" style={{ borderColor: 'rgba(0,212,255,0.65)' }} />
+          <span className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2" style={{ borderColor: 'rgba(0,212,255,0.65)' }} />
+          ▶ 탐험 시작
         </button>
 
-        {/* ── 조작 힌트 ────────────────────────────────────────── */}
-        <p className="mt-5 text-white/20 text-[10px]">
-          드래그로 회전 · 스크롤로 줌 · 별 클릭으로 상세보기
+        {/* Navigation hint */}
+        <p
+          className="mt-5 text-[9px] tracking-[0.22em] uppercase"
+          style={{ color: 'rgba(0,212,255,0.20)' }}
+        >
+          드래그 회전 · 스크롤 줌 · 별 클릭으로 정보 확인
         </p>
       </div>
 
-      {/* ── 하단 제작 크레딧 ─────────────────────────────────── */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/15 text-[9px] z-10">
-        2026 상반기 테커 프로젝트 B팀
+      {/* ── Footer credit ─────────────────────────────────────────── */}
+      <div
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[9px] z-10 tracking-widest uppercase"
+        style={{ color: 'rgba(0,212,255,0.14)' }}
+      >
+        2026 TECHEER PROJECT B-TEAM
       </div>
     </div>
   )

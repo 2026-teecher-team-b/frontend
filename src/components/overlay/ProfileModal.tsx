@@ -1,13 +1,5 @@
 /**
- * ProfileModal.tsx — GitHub 프로필 + 즐겨찾기 모달
- *
- * 열리는 조건: 우상단 아바타 클릭 (로그인 상태)
- *
- * 내용:
- *  - 유저 아바타, GitHub 아이디, GitHub 링크
- *  - 즐겨찾기한 레포 목록 (언어 색상 닷 + 이름 + 해제 버튼)
- *  - 레포 클릭 → 모달 닫고 사이드 패널 열기
- *  - ESC / 배경 클릭으로 닫기
+ * ProfileModal.tsx — GitHub 프로필 + 즐겨찾기 모달 (HUD 리디자인)
  */
 import { useEffect } from 'react'
 import { useUIStore } from '@/store/useUIStore'
@@ -23,7 +15,6 @@ export default function ProfileModal() {
   const repositories = useGalaxyStore((s) => s.repositories)
   const scores       = useGalaxyStore((s) => s.scores)
 
-  // ESC 닫기
   useEffect(() => {
     if (!isProfileModalOpen) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeProfileModal() }
@@ -41,114 +32,151 @@ export default function ProfileModal() {
   }
 
   const handleLogout = async () => {
-    try {
-      await apiClient.post('/auth/logout')
-    } catch {
-      // 세션이 이미 만료됐어도 클라이언트 상태는 초기화
-    }
+    try { await apiClient.post('/auth/logout') } catch { /* ignore */ }
     setUser(null)
     closeProfileModal()
   }
 
   return (
-    /* ── 배경 오버레이 ─────────────────────────────────────────────── */
     <div
       className="fixed inset-0 z-50 flex items-start justify-end p-4"
       onClick={closeProfileModal}
     >
-      {/* ── 모달 카드 ────────────────────────────────────────────── */}
       <div
-        className="
-          mt-14 w-72
-          bg-black/85 backdrop-blur-2xl
-          border border-white/12 rounded-2xl shadow-2xl
-          overflow-hidden
-          animate-[fadeSlideDown_0.18s_ease-out]
-        "
+        className="relative mt-14 w-72 overflow-hidden"
+        style={{
+          background:     'rgba(0,8,22,0.96)',
+          border:         '1px solid rgba(0,212,255,0.18)',
+          backdropFilter: 'blur(20px)',
+          animation:      'fadeSlideDown 0.16s ease-out',
+        }}
         onClick={(e) => e.stopPropagation()}
-        style={{ animation: 'fadeSlideDown 0.18s ease-out' }}
       >
-        {/* ── 헤더: 유저 정보 ──────────────────────────────────── */}
-        <div className="flex items-center gap-3 p-4 border-b border-white/8">
+        {/* Corner brackets */}
+        <span className="absolute top-0 left-0 w-3 h-3 border-t border-l z-10" style={{ borderColor: 'rgba(0,212,255,0.60)' }} />
+        <span className="absolute top-0 right-0 w-3 h-3 border-t border-r z-10" style={{ borderColor: 'rgba(0,212,255,0.60)' }} />
+        <span className="absolute bottom-0 left-0 w-3 h-3 border-b border-l z-10" style={{ borderColor: 'rgba(0,212,255,0.60)' }} />
+        <span className="absolute bottom-0 right-0 w-3 h-3 border-b border-r z-10" style={{ borderColor: 'rgba(0,212,255,0.60)' }} />
+
+        {/* ── Header: user info ──────────────────────────────── */}
+        <div
+          className="flex items-center gap-3 p-4"
+          style={{ borderBottom: '1px solid rgba(0,212,255,0.10)' }}
+        >
           <img
             src={user.profileUrl || `https://github.com/${user.githubLogin}.png?size=64`}
             alt={user.githubLogin}
-            className="w-12 h-12 rounded-full border-2 border-white/20 flex-shrink-0"
+            className="w-11 h-11 flex-shrink-0"
+            style={{ border: '1px solid rgba(0,212,255,0.28)' }}
           />
           <div className="flex-1 min-w-0">
-            <p className="text-white font-mono font-bold text-sm truncate">
+            <p
+              className="text-sm font-bold truncate"
+              style={{ color: 'rgba(255,255,255,0.88)' }}
+            >
               {user.githubLogin}
             </p>
             <a
               href={`https://github.com/${user.githubLogin}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[10px] font-mono text-blue-400/70 hover:text-blue-300 transition-colors"
+              className="text-[10px] tracking-widest transition-colors"
+              style={{ color: 'rgba(0,212,255,0.45)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(0,212,255,0.80)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(0,212,255,0.45)')}
             >
               github.com/{user.githubLogin} ↗
             </a>
           </div>
           <button
             onClick={closeProfileModal}
-            className="w-6 h-6 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/15 text-white/40 hover:text-white/80 text-xs transition-all flex-shrink-0"
+            className="w-6 h-6 flex items-center justify-center text-[10px] flex-shrink-0 transition-all"
+            style={{
+              color:      'rgba(0,212,255,0.40)',
+              border:     '1px solid rgba(0,212,255,0.15)',
+              background: 'rgba(0,212,255,0.04)',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = '#00d4ff'
+              ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,212,255,0.45)'
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = 'rgba(0,212,255,0.40)'
+              ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,212,255,0.15)'
+            }}
           >
             ✕
           </button>
         </div>
 
-        {/* ── 즐겨찾기 섹션 ────────────────────────────────────── */}
+        {/* ── Favorites section ──────────────────────────────── */}
         <div className="p-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[9px] text-white/35 font-mono uppercase tracking-widest">
-              즐겨찾기한 저장소
+          <div
+            className="flex items-center justify-between mb-2 pb-1.5"
+            style={{ borderBottom: '1px solid rgba(0,212,255,0.08)' }}
+          >
+            <p className="text-[8px] tracking-[0.22em] uppercase" style={{ color: 'rgba(0,212,255,0.38)' }}>
+              ★ 즐겨찾기 저장소
             </p>
-            <span className="text-[9px] text-white/30 font-mono">
-              {favoriteRepos.length}개
+            <span className="text-[8px] tracking-widest" style={{ color: 'rgba(0,212,255,0.28)' }}>
+              {favoriteRepos.length}
             </span>
           </div>
 
           {favoriteRepos.length === 0 ? (
-            <div className="py-6 text-center">
-              <p className="text-[11px] text-white/25 font-mono">
-                즐겨찾기한 저장소가 없습니다
+            <div className="py-5 text-center">
+              <p className="text-[11px]" style={{ color: 'rgba(0,212,255,0.28)' }}>
+                즐겨찾기가 없습니다
               </p>
-              <p className="text-[9px] text-white/15 font-mono mt-1">
-                별을 클릭하고 ★를 눌러 추가하세요
+              <p className="text-[9px] mt-1 tracking-wide" style={{ color: 'rgba(0,212,255,0.15)' }}>
+                별 옆의 ★를 클릭해 추가하세요
               </p>
             </div>
           ) : (
-            <ul className="space-y-1 max-h-64 overflow-y-auto pr-0.5">
+            <ul className="space-y-0.5 max-h-60 overflow-y-auto">
               {favoriteRepos.map((repo) => {
-                const score = scores[repo.id]
-                const langColor = getLanguageColor(repo.language)
+                const score      = scores[repo.id]
+                const langColor  = getLanguageColor(repo.language)
                 const isBlackHole = (score?.healthScore ?? 50) < 2
 
                 return (
                   <li key={repo.id}>
-                    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5 transition-colors group">
-                      {/* 언어 색 닷 */}
+                    <div
+                      className="flex items-center gap-2 px-2 py-1.5 transition-all group"
+                      style={{ border: '1px solid transparent' }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,212,255,0.12)'
+                        ;(e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.04)'
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLDivElement).style.borderColor = 'transparent'
+                        ;(e.currentTarget as HTMLDivElement).style.background = 'transparent'
+                      }}
+                    >
                       <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                         style={{
                           backgroundColor: isBlackHole ? '#111' : langColor,
-                          boxShadow: isBlackHole ? 'none' : `0 0 6px ${langColor}80`,
+                          boxShadow: isBlackHole ? 'none' : `0 0 5px ${langColor}80`,
                         }}
                       />
-                      {/* 레포명 — 클릭 시 패널 열기 */}
                       <button
                         onClick={() => handleRepoClick(repo.id)}
-                        className="flex-1 text-left text-[11px] font-mono text-white/70 hover:text-white truncate transition-colors"
+                        className="flex-1 text-left text-[11px] truncate transition-colors"
+                        style={{ color: 'rgba(255,255,255,0.65)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.90)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.65)')}
                       >
                         {repo.name}
                         {isBlackHole && (
-                          <span className="ml-1 text-[9px] text-red-400">🕳</span>
+                          <span className="ml-1 text-[8px]" style={{ color: '#ff3e3e' }}>⬤</span>
                         )}
                       </button>
-                      {/* 즐겨찾기 해제 */}
                       <button
                         onClick={() => toggleFavorite(repo.id)}
-                        className="text-yellow-400/80 hover:text-yellow-300 text-xs opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                        title="즐겨찾기 해제"
+                        className="text-xs opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                        style={{ color: '#ffc23a' }}
+                        title="UNTRACK"
                       >
                         ★
                       </button>
@@ -160,33 +188,53 @@ export default function ProfileModal() {
           )}
         </div>
 
-        {/* ── 하단 액션 ────────────────────────────────────────── */}
-        <div className="px-3 pb-3 border-t border-white/8 mt-1 pt-2 flex items-center gap-2">
-          {/* GitHub 프로필 바로가기 */}
+        {/* ── Footer actions ─────────────────────────────────── */}
+        <div
+          className="px-3 pb-3 pt-2 flex items-center gap-2"
+          style={{ borderTop: '1px solid rgba(0,212,255,0.08)' }}
+        >
           <a
             href={`https://github.com/${user.githubLogin}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 py-2 text-center text-[10px] font-mono text-white/40 hover:text-white/70 bg-white/4 hover:bg-white/8 border border-white/8 rounded-lg transition-all"
+            className="flex-1 py-2 text-center text-[9px] tracking-widest uppercase transition-all"
+            style={{
+              color:      'rgba(0,212,255,0.45)',
+              background: 'rgba(0,212,255,0.04)',
+              border:     '1px solid rgba(0,212,255,0.12)',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.color = '#00d4ff'
+              ;(e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(0,212,255,0.35)'
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.color = 'rgba(0,212,255,0.45)'
+              ;(e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(0,212,255,0.12)'
+            }}
           >
             GitHub 프로필 ↗
           </a>
-          {/* 로그아웃 */}
           <button
             onClick={handleLogout}
-            className="flex-1 py-2 text-center text-[10px] font-mono text-red-400/60 hover:text-red-300 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-lg transition-all"
+            className="flex-1 py-2 text-center text-[9px] tracking-widest uppercase transition-all"
+            style={{
+              color:      'rgba(255,62,62,0.60)',
+              background: 'rgba(255,62,62,0.04)',
+              border:     '1px solid rgba(255,62,62,0.12)',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = '#ff3e3e'
+              ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,62,62,0.35)'
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,62,62,0.60)'
+              ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,62,62,0.12)'
+            }}
           >
             로그아웃
           </button>
         </div>
       </div>
-
-      <style>{`
-        @keyframes fadeSlideDown {
-          from { opacity: 0; transform: translateY(-8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   )
 }

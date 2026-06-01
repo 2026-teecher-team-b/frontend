@@ -1,15 +1,17 @@
 /**
- * physics.ts — 물리/수학 유틸리티
+ * physics.ts — 물리/수학 유틸리티  v4 (Galaxy Disc)
  *
- * 포함:
- *  1. Lerp 함수 (스칼라 / Vector3)
- *  2. 점수 → 시각 속성 변환
- *  3. 언어별 색상 맵
- *  4. 깔때기(Wormhole) 수학 — v3 전면 개편
- *     - activityToY  : 활성도 점수 → Y축 위치
- *     - funnelRadius : Y좌표 → 해당 Y에서의 깔때기 반지름
- *     - funnelPosition : (점수, theta) → 3D 위치 [x,y,z]
- *  5. N-body 상수 (레거시 — 현재는 미사용)
+ * v4 변경: 웜홀 깔때기 → 나선 은하 디스크
+ *  - 별들이 언어별 나선팔(arm)에 배치됨
+ *  - activityScore → 은하 중심으로부터의 반지름 (활성 = 내부, 비활성 = 외부)
+ *  - healthScore < 2 → 블랙홀: 나선팔을 따라 중심으로 빨려 들어감
+ *  - 2D 뷰(위에서): 언어별 나선팔이 명확히 구분됨
+ *
+ * 오픈소스 기여자 관점:
+ *  - 내부 링 = 가장 활발한 레포 (기여 수용 빠름)
+ *  - 나선팔 색 = 기술 스택 (언어)
+ *  - 별 크기  = 레포 인기도 (star/fork 수)
+ *  - 중심부   = 핵심 생태계 (매우 활발한 레포들)
  */
 
 import type { Vector3 } from 'three'
@@ -38,27 +40,16 @@ export function lerpVec3(
 // 2. 점수 → 시각 속성
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * 별 시각 반지름 계산
- *
- * 정규화 후 sizeScore/activityScore가 3~95 범위로 들어옴.
- * 제곱근 스케일 적용 → 중간 크기 별이 많아져 은하가 풍성해 보임.
- *
- * 최종 범위: 약 0.22 ~ 2.55
- */
 export function scoreToRadius(sizeScore: number, activityScore = 50): number {
   const s = Math.max(0, Math.min(100, sizeScore))
   const a = Math.max(0, Math.min(100, activityScore))
-  const base    = 0.28 + Math.sqrt(s / 100) * 1.85   // 제곱근: 하위권도 어느 정도 크기 보장
-  const actMult = 0.80 + (a / 100) * 0.45             // 활동 기반 ±25% 조정
+  // 기본 크기: sizeScore 기반 (0.18 ~ 1.50)
+  const base    = 0.18 + Math.sqrt(s / 100) * 1.32
+  // 활성도 배율: 활발할수록 약간 더 크게 (0.75 ~ 1.30)
+  const actMult = 0.75 + (a / 100) * 0.55
   return base * actMult
 }
 
-/**
- * healthScore(0~100) → emissive 강도 (0.15 ~ 1.95)
- * 로그 스케일: 낮은 점수도 완전히 꺼지지 않고 희미하게 빛남.
- * 정규화 후 최솟값이 3 이상이므로 블랙홀이 아닌 별은 항상 보임.
- */
 export function scoreToEmissiveIntensity(healthScore: number): number {
   const h = Math.max(0, Math.min(100, healthScore))
   return 0.15 + (Math.log1p(h / 100 * Math.E) / Math.log1p(Math.E)) * 1.8
@@ -69,20 +60,20 @@ export function scoreToEmissiveIntensity(healthScore: number): number {
 // ─────────────────────────────────────────────────────────────────
 
 export const LANGUAGE_COLORS: Record<string, string> = {
-  TypeScript:  '#60aaff',   // 선명한 파랑
-  JavaScript:  '#ffe033',   // 밝은 노랑
-  Python:      '#5dcbf5',   // 밝은 하늘색
-  Go:          '#00f0d8',   // 형광 청록
-  Rust:        '#ff7055',   // 밝은 주황-빨강
-  Java:        '#ffbf55',   // 밝은 주황
-  'C++':       '#ff5c8a',   // 핫핑크
-  Ruby:        '#ff5555',   // 밝은 빨강
-  Swift:       '#ff7a40',   // 밝은 오렌지
-  Kotlin:      '#cc88ff',   // 밝은 보라
-  PHP:         '#aaaaff',   // 라벤더
-  'C#':        '#80e080',   // 밝은 초록
-  Scala:       '#ff6666',   // 밝은 붉은빛
-  Haskell:     '#bb88ff',   // 연보라
+  TypeScript:  '#60aaff',
+  JavaScript:  '#ffe033',
+  Python:      '#5dcbf5',
+  Go:          '#00f0d8',
+  Rust:        '#ff7055',
+  Java:        '#ffbf55',
+  'C++':       '#ff5c8a',
+  Ruby:        '#ff5555',
+  Swift:       '#ff7a40',
+  Kotlin:      '#cc88ff',
+  PHP:         '#aaaaff',
+  'C#':        '#80e080',
+  Scala:       '#ff6666',
+  Haskell:     '#bb88ff',
 }
 export const DEFAULT_COLOR = '#ccd8ee'
 
@@ -91,67 +82,157 @@ export function getLanguageColor(language: string | null): string {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 4. 깔때기(Wormhole) 수학  ★ v3 핵심
+// 4. 나선 은하 디스크 (Galaxy Disc)  ★ v4 핵심
 // ─────────────────────────────────────────────────────────────────
 //
-//  Y축 = 높이
-//   RIM_Y  = 상단 넓은 입구 (활성도 높은 별들)
-//   THROAT_Y = 하단 좁은 목 (활성도 낮은 별, 블랙홀)
+//  은하 좌표계:
+//   - 중심 (0,0,0) = 갤럭틱 코어
+//   - Y = 0 평면 = 은하 디스크 (±GALAXY_H_AMP 높이)
 //
 //  반지름 공식:
-//   r(y) = THROAT_R + (RIM_R - THROAT_R) * ((y - THROAT_Y) / (RIM_Y - THROAT_Y))^EXPONENT
+//   r = GALAXY_R_OUTER - (GALAXY_R_OUTER - GALAXY_R_INNER) * activity/100
+//   → activity 100 = GALAXY_R_INNER (코어 근처, 가장 활발)
+//   → activity 0   = GALAXY_R_OUTER (외곽, 비활성)
 //
-//  EXPONENT < 1  → 목이 좁고 입구 쪽이 급격히 넓어지는 깔때기 모양.
+//  나선팔 공식:
+//   θ = armBaseAngle + SPIRAL_K * ln(r / GALAXY_R_INNER + 1) + orbitAngle
+//   → 같은 언어 = 같은 arm 방향
+//   → r이 클수록 armAngle에서 더 많이 구부러짐 → 진짜 나선 모양
 //
 
-/**
- * 블랙홀 판정 healthScore 임계값
- * calcHealthScore: hourlyAvg × 20 → 0.1 events/hr = 2점
- * 즉 하루 약 2.4건 미만 활동 레포만 블랙홀로 표시
- */
+/** 블랙홀 판정 임계값 */
 export const BLACKHOLE_HEALTH_THRESHOLD = 2
 
-/** 깔때기 상단 Y 좌표 (활성도 100인 별 위치) */
-export const RIM_Y     =  120
-/** 깔때기 목 Y 좌표 (활성도 0인 별, 블랙홀) */
-export const THROAT_Y  = -160
-/** 상단 입구 반지름 */
-export const RIM_R     =  195
-/** 하단 목 반지름 */
-export const THROAT_R  =    4
-/** 반지름 곡선 지수 (< 1 → 깔때기 형상) */
-export const EXPONENT  =  0.52
-/** Y축 lerp 속도 (클수록 빠르게 목표 Y로 이동) */
-export const FUNNEL_LERP_SPEED = 0.028
-/** 수평 회전 기본 속도 (rad/s) */
-export const BASE_THETA_SPEED  = 0.06
+/** 은하 내부 반지름 (가장 활발한 레포 위치) */
+export const GALAXY_R_INNER = 22
+
+/** 은하 외부 반지름 (비활성 / 외곽 팔) */
+export const GALAXY_R_OUTER = 185
+
+/** 디스크 두께 진폭 (y축 노이즈) — 내부일수록 더 두꺼움 */
+export const GALAXY_H_AMP = 14
+
+/** 나선팔 감김 계수 (클수록 팔이 더 타이트하게 감김) */
+export const SPIRAL_K = 0.55
+
+/** 궤도 기본 속도 (rad/s) — 반지름별 Kepler 보정 적용 */
+export const BASE_ORBIT_SPEED = 0.038
+
+/** 반지름 lerp 속도 */
+export const GALAXY_R_LERP = 0.012
+
+/** 블랙홀 중심 당김 속도 */
+export const BH_R_PULL = 0.007
+
 /** 블랙홀 회전 배율 */
-export const BH_THETA_MULT     = 4.5
-/** 표면 위아래 약간의 노이즈 진폭 */
-export const SURFACE_NOISE_AMP = 6.0
+export const BH_THETA_MULT = 4.2
+
+/** 언어별 나선팔 시작 각도 (radians) */
+const DEG = Math.PI / 180
+export const LANG_ARM_ANGLES: Record<string, number> = {
+  TypeScript:  0   * DEG,
+  JavaScript:  26  * DEG,
+  Python:      52  * DEG,
+  Go:          78  * DEG,
+  Rust:        104 * DEG,
+  Java:        130 * DEG,
+  'C++':       156 * DEG,
+  Ruby:        182 * DEG,
+  Swift:       208 * DEG,
+  Kotlin:      234 * DEG,
+  PHP:         260 * DEG,
+  'C#':        286 * DEG,
+  Scala:       312 * DEG,
+  Haskell:     338 * DEG,
+}
+
+/** 결정론적 시드 (repoId 기반) */
+function seeded(id: number, salt: number): number {
+  return Math.abs(Math.sin(id * 127.1 + salt * 311.7) * 43758.5453) % 1
+}
 
 /**
- * activityScore(0~100) → 깔때기 Y 좌표.
- * 활성도 높을수록 위, 낮을수록 아래(목).
+ * activityScore(0~100) → 은하 반지름.
+ * 활성도 높을수록 코어 근처(작은 r), 낮을수록 외곽(큰 r).
  */
+export function activityToGalaxyRadius(activityScore: number): number {
+  const t = Math.max(0, Math.min(100, activityScore)) / 100
+  return GALAXY_R_OUTER - (GALAXY_R_OUTER - GALAXY_R_INNER) * t
+}
+
+/**
+ * 언어 → 나선팔 기준 각도.
+ * 미등록 언어는 repoId 기반 결정론적 값 사용.
+ */
+export function getArmAngle(language: string | null, repoId: number): number {
+  if (language && LANG_ARM_ANGLES[language] !== undefined) {
+    return LANG_ARM_ANGLES[language]
+  }
+  return seeded(repoId, 42) * Math.PI * 2
+}
+
+/**
+ * 나선팔 theta 계산.
+ * θ = baseArm + SPIRAL_K * ln(r / R_INNER + 1) + orbitAngle
+ */
+export function spiralTheta(armAngle: number, r: number, orbitAngle: number): number {
+  return armAngle + SPIRAL_K * Math.log(Math.max(1, r / GALAXY_R_INNER) + 1) + orbitAngle
+}
+
+/**
+ * (activityScore, armAngle, orbitAngle, time, noisePhase) → 3D 좌표 [x,y,z]
+ */
+export function galaxyPosition(
+  activityScore: number,
+  armAngle: number,
+  orbitAngle: number,
+  time: number,
+  noisePhase: number,
+): [number, number, number] {
+  const r = activityToGalaxyRadius(activityScore)
+  const theta = spiralTheta(armAngle, r, orbitAngle)
+  // 내부일수록 디스크 두꺼움 (rNorm: 1=내부, 0=외부)
+  const rNorm = 1 - (r - GALAXY_R_INNER) / (GALAXY_R_OUTER - GALAXY_R_INNER)
+  const y = GALAXY_H_AMP * Math.sin(time * 0.35 + noisePhase) * Math.max(0, rNorm)
+  return [r * Math.cos(theta), y, r * Math.sin(theta)]
+}
+
+/**
+ * 초기 별 위치 생성 (physicsStore.register 용)
+ */
+export function generateGalaxyPosition(
+  language: string | null,
+  repoId: number,
+  activityScore = 50,
+): [number, number, number] {
+  const armAngle  = getArmAngle(language, repoId)
+  const orbitAngle = seeded(repoId, 1) * Math.PI * 2
+  return galaxyPosition(activityScore, armAngle, orbitAngle, 0, seeded(repoId, 3) * Math.PI * 2)
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 5. 레거시 (웜홀 / N-body) — 하위 호환용, 현재는 미사용
+// ─────────────────────────────────────────────────────────────────
+
+export const RIM_Y      =  120
+export const THROAT_Y   = -160
+export const RIM_R      =  195
+export const THROAT_R   =    4
+export const EXPONENT   =  0.52
+export const FUNNEL_LERP_SPEED = 0.028
+export const BASE_THETA_SPEED  = 0.06
+export const SURFACE_NOISE_AMP = 6.0
+
 export function activityToY(activityScore: number): number {
   const t = Math.max(0, Math.min(100, activityScore)) / 100
   return THROAT_Y + (RIM_Y - THROAT_Y) * t
 }
 
-/**
- * Y좌표 → 해당 높이에서의 깔때기 반지름.
- * y가 THROAT_Y 이하면 THROAT_R, RIM_Y 이상이면 RIM_R.
- */
 export function funnelRadius(y: number): number {
   const t = Math.max(0, Math.min(1, (y - THROAT_Y) / (RIM_Y - THROAT_Y)))
   return THROAT_R + (RIM_R - THROAT_R) * Math.pow(t, EXPONENT)
 }
 
-/**
- * (activityScore, theta) → 깔때기 표면 위의 3D 좌표 [x, y, z].
- * noiseOffset: 표면에서 약간 위아래 노이즈 (0이면 정확한 표면)
- */
 export function funnelPosition(
   activityScore: number,
   theta: number,
@@ -161,10 +242,6 @@ export function funnelPosition(
   const r = funnelRadius(y)
   return [r * Math.cos(theta), y, r * Math.sin(theta)]
 }
-
-// ─────────────────────────────────────────────────────────────────
-// 5. 레거시 N-body 상수 (하위 호환 — 현재 사용 안 함)
-// ─────────────────────────────────────────────────────────────────
 
 export const ATTRACTION_K   = 0.040
 export const REPULSION_K    = 3.8
@@ -176,28 +253,27 @@ export const ATTRACTION_RANGE = 75
 export const REPULSION_RANGE  = 30
 
 const CLUSTER_BASES: Record<string, [number, number, number]> = {
-  TypeScript:  [ 85,  40,  8],
-  JavaScript:  [ 55, -42,  0],
-  Python:      [-90,  25,  5],
-  Go:          [ 12,  92, -5],
-  Rust:        [ 10, -92,  5],
-  Java:        [-62,  58, -4],
-  'C++':       [-48, -62,  6],
-  Ruby:        [-88, -38,  0],
-  Swift:       [ 58,  72,  2],
-  Kotlin:      [-28,  68, 10],
-  PHP:         [-72, -12,  5],
-  'C#':        [ 42, -72, -5],
-  Scala:       [-18, -58, 10],
-  Haskell:     [ 30,  62, -8],
+  TypeScript: [ 85,  40,  8], JavaScript: [ 55, -42,  0],
+  Python:     [-90,  25,  5], Go:         [ 12,  92, -5],
+  Rust:       [ 10, -92,  5], Java:       [-62,  58, -4],
+  'C++':      [-48, -62,  6], Ruby:       [-88, -38,  0],
+  Swift:      [ 58,  72,  2], Kotlin:     [-28,  68, 10],
+  PHP:        [-72, -12,  5], 'C#':       [ 42, -72, -5],
+  Scala:      [-18, -58, 10], Haskell:    [ 30,  62, -8],
 }
 
-export function getDriftingCenter(
-  language: string | null,
-  time: number,
-): [number, number, number] {
+export function generateClusteredPosition(language: string | null): [number, number, number] {
   const base = language ? (CLUSTER_BASES[language] ?? [0, 0, 0]) : [0, 0, 0]
-  // 언어 첫 글자 코드로 위상 결정 → 언어마다 다른 궤도
+  const spread = 28
+  return [
+    base[0] + (Math.random() - 0.5) * spread,
+    base[1] + (Math.random() - 0.5) * spread,
+    base[2] + (Math.random() - 0.5) * spread * 0.5,
+  ]
+}
+
+export function getDriftingCenter(language: string | null, time: number): [number, number, number] {
+  const base = language ? (CLUSTER_BASES[language] ?? [0, 0, 0]) : [0, 0, 0]
   const phase = language ? language.charCodeAt(0) * 1.618 : 0
   const amp = 6
   return [
@@ -211,50 +287,24 @@ export function getBaseCenter(language: string | null): [number, number, number]
   return language ? (CLUSTER_BASES[language] ?? [0, 0, 0]) : [0, 0, 0]
 }
 
-export function generateClusteredPosition(
-  language: string | null,
-): [number, number, number] {
-  const base = language ? (CLUSTER_BASES[language] ?? [0, 0, 0]) : [0, 0, 0]
-  const spread = 28
-  return [
-    base[0] + (Math.random() - 0.5) * spread,
-    base[1] + (Math.random() - 0.5) * spread,
-    base[2] + (Math.random() - 0.5) * spread * 0.5,
-  ]
-}
-
 export function computePairForce(
   ax: number, ay: number, az: number, langA: string | null,
   bx: number, by: number, bz: number, langB: string | null,
 ): [number, number, number] {
-  const dx = bx - ax
-  const dy = by - ay
-  const dz = bz - az
+  const dx = bx - ax, dy = by - ay, dz = bz - az
   const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
   if (dist < 0.001) return [0, 0, 0]
-
   const clampedDist = Math.max(dist, MIN_DIST)
-  const nx = dx / dist  // 정규화 방향
-  const ny = dy / dist
-  const nz = dz / dist
-
+  const nx = dx / dist, ny = dy / dist, nz = dz / dist
   const sameLang = langA !== null && langA === langB
-
   let fx = 0, fy = 0, fz = 0
-
   if (sameLang && dist < ATTRACTION_RANGE) {
     const f = ATTRACTION_K / (clampedDist * clampedDist)
-    fx += nx * f
-    fy += ny * f
-    fz += nz * f
+    fx += nx * f; fy += ny * f; fz += nz * f
   }
-
   if (dist < REPULSION_RANGE) {
     const f = REPULSION_K / (clampedDist * clampedDist)
-    fx -= nx * f
-    fy -= ny * f
-    fz -= nz * f
+    fx -= nx * f; fy -= ny * f; fz -= nz * f
   }
-
   return [fx, fy, fz]
 }

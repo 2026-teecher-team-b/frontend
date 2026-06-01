@@ -1,14 +1,9 @@
 /**
- * SidePanel.tsx — 저장소 상세 패널
+ * SidePanel.tsx — 저장소 상세 패널 (HUD 리디자인)
  *
- * 반응형 레이아웃:
- *  - 모바일(< 768px): 하단에서 위로 슬라이드하는 바텀시트 (화면 75% 높이)
- *  - 데스크톱(≥ 768px): 우측에서 슬라이드 (260~600px 너비, 드래그로 조절 가능)
- *
- * 기타 기능:
- *  - ScoreChart: 24h 점수 스파크라인
- *  - RAGAnalysis: AI 분석 질의응답
- *  - ESC / X 버튼 / 빈 화면 클릭으로 닫기
+ * 반응형:
+ *  - 모바일(< 768px): 바텀시트 (75vh)
+ *  - 데스크톱(≥ 768px): 우측 사이드패널 (260~600px, 드래그 리사이즈)
  */
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { useUIStore } from '@/store/useUIStore'
@@ -32,7 +27,6 @@ export default function SidePanel() {
 
   const { data: history } = useScoreHistory(isPanelOpen ? selectedRepoId : null)
 
-  // ── 데스크톱 전용: 패널 너비 드래그 리사이즈 ─────────────────────
   const [panelWidth, setPanelWidth] = useState(320)
   const dragging = useRef(false)
   const startX   = useRef(0)
@@ -49,8 +43,7 @@ export default function SidePanel() {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return
-      const newW = Math.max(260, Math.min(600, startW.current - (e.clientX - startX.current)))
-      setPanelWidth(newW)
+      setPanelWidth(Math.max(260, Math.min(600, startW.current - (e.clientX - startX.current))))
     }
     const onUp = () => { dragging.current = false }
     window.addEventListener('mousemove', onMove)
@@ -58,181 +51,312 @@ export default function SidePanel() {
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
   }, [])
 
-  // ESC 단축키
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closePanel() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [closePanel])
 
-  const langColor = getLanguageColor(repo?.language ?? null)
-  const repoOwner = repo ? (repo.owner ?? repo.fullName.split('/')[0]) : ''
-  const repoName  = repo?.name ?? ''
+  const langColor  = getLanguageColor(repo?.language ?? null)
+  const repoOwner  = repo ? (repo.owner ?? repo.fullName.split('/')[0]) : ''
+  const repoName   = repo?.name ?? ''
+  const isBlackHole = (score?.healthScore ?? 50) < BLACKHOLE_HEALTH_THRESHOLD
 
-  // ── 반응형 레이아웃 스타일 ────────────────────────────────────────
-  // 모바일: 바텀시트 (하단에서 위로), 데스크톱: 우측 사이드패널
   const containerStyle = isMobile
     ? {
-        // 모바일: 전체 너비, 화면 75% 높이, 하단 고정
         bottom: 0, left: 0, right: 0,
         height: '75vh',
         transform: isPanelOpen ? 'translateY(0)' : 'translateY(100%)',
       }
     : {
-        // 데스크톱: 우측 고정, 전체 높이
         top: 0, right: 0,
         width: panelWidth,
         height: '100%',
         transform: isPanelOpen ? 'translateX(0)' : 'translateX(100%)',
       }
 
+  const panelBg     = 'rgba(0,8,22,0.95)'
+  const panelBorder = 'rgba(0,212,255,0.16)'
+
   return (
     <div
       className="absolute z-30 flex transition-transform duration-300 ease-out"
       style={containerStyle}
     >
-      {/* ── 데스크톱: 좌측 리사이즈 핸들 ──────────────────────────── */}
+      {/* Desktop resize handle */}
       {!isMobile && (
         <div
           onMouseDown={onResizeStart}
-          className="w-1 h-full cursor-col-resize hover:bg-white/10 transition-colors flex-shrink-0"
+          className="w-1 h-full cursor-col-resize flex-shrink-0 transition-colors"
+          style={{ background: 'rgba(0,212,255,0.06)' }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.20)')}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.background = 'rgba(0,212,255,0.06)')}
         />
       )}
 
-      {/* ── 패널 본체 ──────────────────────────────────────────────── */}
-      <div className={`
-        flex-1 bg-black/80 backdrop-blur-xl border-white/8 overflow-y-auto flex flex-col
-        ${isMobile
-          ? 'border-t rounded-t-2xl'
-          : 'border-l'
-        }
-      `}>
-        {/* ── 모바일: 드래그 핸들 인디케이터 ───────────────────────── */}
+      {/* ── Panel body ──────────────────────────────────────────── */}
+      <div
+        className="flex-1 overflow-y-auto flex flex-col"
+        style={{
+          background:     panelBg,
+          borderLeft:     isMobile ? 'none' : `1px solid ${panelBorder}`,
+          borderTop:      isMobile ? `1px solid ${panelBorder}` : 'none',
+          backdropFilter: 'blur(20px)',
+        }}
+      >
+        {/* Mobile drag indicator */}
         {isMobile && (
           <div className="flex justify-center pt-2 pb-0.5 flex-shrink-0">
-            <div className="w-10 h-1 rounded-full bg-white/20" />
+            <div className="w-10 h-0.5" style={{ background: 'rgba(0,212,255,0.25)' }} />
           </div>
         )}
 
-        {/* ── 헤더 ──────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between p-4 border-b border-white/8 sticky top-0 bg-black/60 backdrop-blur-md z-10">
+        {/* ── Panel header ──────────────────────────────────────── */}
+        <div
+          className="flex items-start justify-between p-4 sticky top-0 flex-shrink-0"
+          style={{
+            borderBottom:   `1px solid rgba(0,212,255,0.10)`,
+            background:     'rgba(0,6,18,0.90)',
+            backdropFilter: 'blur(12px)',
+            zIndex: 10,
+          }}
+        >
           <div className="flex-1 min-w-0 pr-2">
             {repo ? (
               <>
+                {/* Section label */}
+                <p className="text-[8px] tracking-[0.22em] uppercase mb-1.5" style={{ color: 'rgba(0,212,255,0.35)' }}>
+                  ◈ 저장소 정보
+                </p>
                 <div className="flex items-center gap-2 mb-0.5">
                   {repo.language && (
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: langColor, boxShadow: `0 0 6px ${langColor}` }} />
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{
+                        backgroundColor: langColor,
+                        boxShadow: `0 0 6px ${langColor}`,
+                      }}
+                    />
                   )}
-                  <h2 className="text-white font-mono font-bold text-sm truncate">{repo.name}</h2>
+                  <h2
+                    className="font-bold text-sm truncate"
+                    style={{ color: isBlackHole ? '#ff3e3e' : 'rgba(255,255,255,0.90)' }}
+                  >
+                    {repo.name}
+                  </h2>
+                  {isBlackHole && (
+                    <span className="text-[8px] tracking-widest flex-shrink-0" style={{ color: '#ff3e3e' }}>
+                      ⬤ 블랙홀
+                    </span>
+                  )}
                 </div>
-                <p className="text-white/40 text-[10px] font-mono truncate">{repo.fullName}</p>
+                <p className="text-[10px] truncate" style={{ color: 'rgba(0,212,255,0.38)' }}>
+                  {repo.fullName}
+                </p>
               </>
             ) : (
-              <div className="h-8 bg-white/5 rounded animate-pulse" />
+              <div className="h-10 animate-pulse" style={{ background: 'rgba(0,212,255,0.06)' }} />
             )}
           </div>
+
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {selectedRepoId && (
               <button
                 onClick={() => toggleFavorite(selectedRepoId)}
-                className={`text-lg transition-all ${fav ? 'text-yellow-400' : 'text-white/20 hover:text-yellow-400/60'}`}
-                title={fav ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                className="text-base transition-all"
+                style={{ color: fav ? '#ffc23a' : 'rgba(0,212,255,0.22)' }}
+                onMouseEnter={(e) => {
+                  if (!fav) (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,194,58,0.55)'
+                }}
+                onMouseLeave={(e) => {
+                  if (!fav) (e.currentTarget as HTMLButtonElement).style.color = 'rgba(0,212,255,0.22)'
+                }}
+                title={fav ? 'UNTRACK' : 'TRACK'}
               >★</button>
             )}
             <button
               onClick={closePanel}
-              className="w-7 h-7 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/15 text-white/40 hover:text-white/80 transition-all text-sm"
+              className="w-6 h-6 flex items-center justify-center text-[10px] transition-all"
+              style={{
+                color:      'rgba(0,212,255,0.40)',
+                border:     '1px solid rgba(0,212,255,0.15)',
+                background: 'rgba(0,212,255,0.04)',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.color = '#00d4ff'
+                ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,212,255,0.45)'
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.color = 'rgba(0,212,255,0.40)'
+                ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,212,255,0.15)'
+              }}
             >✕</button>
           </div>
         </div>
 
-        {/* ── 컨텐츠 ────────────────────────────────────────────────── */}
+        {/* ── Content ───────────────────────────────────────────── */}
         {repo ? (
           <div className="p-4 space-y-4 flex-1">
-            {/* 점수 카드 */}
+
+            {/* Score metrics */}
             {score && (
-              <div className="grid grid-cols-3 gap-2">
+              <>
+                <p className="text-[8px] tracking-[0.22em] uppercase" style={{ color: 'rgba(0,212,255,0.32)' }}>
+                  ▸ 성능 지표
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: '활성도', value: score.activityScore, color: '#00d4ff' },
+                    {
+                      label: '건강도',
+                      value: score.healthScore,
+                      color: score.healthScore < BLACKHOLE_HEALTH_THRESHOLD
+                        ? '#ff3e3e'
+                        : score.healthScore < 40
+                        ? '#ffaa00'
+                        : '#00ff88',
+                    },
+                    {
+                      label: '트렌드 Δ',
+                      value: `${score.trendDelta > 0 ? '+' : ''}${score.trendDelta.toFixed(0)}`,
+                      color: score.trendDelta > 0 ? '#00ff88' : score.trendDelta < 0 ? '#ff3e3e' : 'rgba(0,212,255,0.55)',
+                    },
+                  ].map(({ label, value, color }) => (
+                    <div
+                      key={label}
+                      className="relative p-2.5 text-center"
+                      style={{
+                        background: 'rgba(0,212,255,0.03)',
+                        border:     '1px solid rgba(0,212,255,0.10)',
+                      }}
+                    >
+                      <span className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l" style={{ borderColor: 'rgba(0,212,255,0.40)' }} />
+                      <span className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r" style={{ borderColor: 'rgba(0,212,255,0.40)' }} />
+                      <p className="text-[8px] tracking-widest uppercase mb-1" style={{ color: 'rgba(0,212,255,0.32)' }}>{label}</p>
+                      <p className="text-sm font-bold tabular-nums" style={{ color }}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Stats */}
+            <div>
+              <p className="text-[8px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.32)' }}>
+                ▸ 저장소 통계
+              </p>
+              <div className="grid grid-cols-3 gap-2 text-center">
                 {[
-                  { label: '활동', value: score.activityScore, color: '#4f8ef7' },
-                  { label: '건강', value: score.healthScore,   color: score.healthScore < BLACKHOLE_HEALTH_THRESHOLD ? '#f87171' : score.healthScore < 40 ? '#fb923c' : '#4ade80' },
-                  { label: '트렌드', value: `${score.trendDelta > 0 ? '+' : ''}${score.trendDelta.toFixed(0)}`, color: score.trendDelta > 0 ? '#4ade80' : '#f87171' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-white/4 rounded-lg p-2.5 text-center border border-white/5">
-                    <p className="text-[9px] text-white/30 font-mono mb-1">{label}</p>
-                    <p className="text-sm font-mono font-bold" style={{ color }}>{value}</p>
+                  { label: '스타',   value: repo.starCount       != null ? String(repo.starCount)       : '—' },
+                  { label: '포크',   value: repo.forkCount       != null ? String(repo.forkCount)       : '—' },
+                  { label: '이슈',   value: repo.openIssueCount  != null ? String(repo.openIssueCount)  : '—' },
+                ].map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="p-2"
+                    style={{
+                      background: 'rgba(0,212,255,0.02)',
+                      border:     '1px solid rgba(0,212,255,0.08)',
+                    }}
+                  >
+                    <p className="text-[8px] tracking-widest uppercase" style={{ color: 'rgba(0,212,255,0.28)' }}>{label}</p>
+                    <p className="text-xs font-bold mt-0.5 tabular-nums" style={{ color: 'rgba(255,255,255,0.70)' }}>{value}</p>
                   </div>
                 ))}
               </div>
-            )}
-
-            {/* 통계 — 모바일에서 더 컴팩트하게 */}
-            <div className="grid grid-cols-3 gap-2 text-center">
-              {[
-                { label: 'Stars',  value: repo.starCount != null ? String(repo.starCount) : '—' },
-                { label: 'Forks',  value: repo.forkCount != null ? String(repo.forkCount) : '—' },
-                { label: 'Issues', value: repo.openIssueCount != null ? String(repo.openIssueCount) : '—' },
-              ].map(({ label, value }) => (
-                <div key={label} className="bg-white/3 rounded-lg p-2 border border-white/5">
-                  <p className="text-[8px] text-white/30 font-mono">{label}</p>
-                  <p className="text-xs font-mono text-white/70 font-semibold">{value}</p>
-                </div>
-              ))}
             </div>
 
-            {/* 메타 정보 */}
-            <div className="space-y-1.5 text-[10px] font-mono">
+            {/* Meta */}
+            <div className="space-y-1.5 text-[10px]">
               {repo.language && (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: langColor }} />
-                  <span className="text-white/50">{repo.language}</span>
+                  <span style={{ color: 'rgba(255,255,255,0.50)' }}>{repo.language}</span>
                 </div>
               )}
               {(repo.pushedAt ?? repo.lastCollectedAt) && (
-                <p className="text-white/30">
-                  마지막 업데이트: {timeAgo(repo.pushedAt ?? repo.lastCollectedAt ?? '')}
+                <p style={{ color: 'rgba(0,212,255,0.30)' }}>
+                  최근 업데이트: {timeAgo(repo.pushedAt ?? repo.lastCollectedAt ?? '')}
                 </p>
               )}
               {repo.description && (
-                <p className="text-white/50 leading-relaxed pt-1">{repo.description}</p>
+                <p className="leading-relaxed pt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  {repo.description}
+                </p>
               )}
             </div>
 
-            {/* 토픽 */}
+            {/* Topics */}
             {repo.topics && repo.topics.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {repo.topics.map((t) => (
-                  <span key={t} className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300/70 border border-blue-400/15">
+                  <span
+                    key={t}
+                    className="text-[9px] px-2 py-0.5 tracking-widest uppercase"
+                    style={{
+                      color:      'rgba(0,212,255,0.60)',
+                      background: 'rgba(0,212,255,0.06)',
+                      border:     '1px solid rgba(0,212,255,0.16)',
+                    }}
+                  >
                     {t}
                   </span>
                 ))}
               </div>
             )}
 
-            {/* 점수 차트 (데스크톱에서만) */}
+            {/* Score chart (desktop only) */}
             {!isMobile && history && history.length > 0 && (
-              <ScoreChart scores={history} width={panelWidth - 48} />
+              <div>
+                <p className="text-[8px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.32)' }}>
+                  ▸ 활동 타임라인
+                </p>
+                <ScoreChart scores={history} width={panelWidth - 48} />
+              </div>
             )}
 
-            {/* AI 분석 */}
-            <RAGAnalysis owner={repoOwner} repo={repoName} />
+            {/* AI analysis */}
+            <div>
+              <p className="text-[8px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.32)' }}>
+                ▸ AI 분석
+              </p>
+              <RAGAnalysis owner={repoOwner} repo={repoName} />
+            </div>
 
-            {/* GitHub 링크 */}
+            {/* GitHub link */}
             <a
               href={repo.htmlUrl ?? `https://github.com/${repo.fullName}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/8 text-[11px] font-mono text-white/50 hover:text-white/80 transition-all"
+              className="flex items-center justify-center gap-2 w-full py-2.5 text-[10px] tracking-[0.18em] uppercase transition-all"
+              style={{
+                color:      'rgba(0,212,255,0.50)',
+                background: 'rgba(0,212,255,0.03)',
+                border:     '1px solid rgba(0,212,255,0.12)',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.color = '#00d4ff'
+                ;(e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(0,212,255,0.38)'
+                ;(e.currentTarget as HTMLAnchorElement).style.background = 'rgba(0,212,255,0.06)'
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.color = 'rgba(0,212,255,0.50)'
+                ;(e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(0,212,255,0.12)'
+                ;(e.currentTarget as HTMLAnchorElement).style.background = 'rgba(0,212,255,0.03)'
+              }}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.483 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844a9.59 9.59 0 012.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z"/>
               </svg>
-              GitHub에서 보기
+              GitHub에서 보기 ↗
             </a>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-white/20 text-xs font-mono">
-            별을 {isMobile ? '탭' : '클릭'}하세요
+          <div className="flex-1 flex flex-col items-center justify-center gap-2">
+            <span className="text-2xl" style={{ color: 'rgba(0,212,255,0.15)' }}>◈</span>
+            <p className="text-[10px] tracking-[0.22em] uppercase" style={{ color: 'rgba(0,212,255,0.22)' }}>
+              {isMobile ? '별을 탭하면 정보를 볼 수 있어요' : '별을 클릭하면 정보를 볼 수 있어요'}
+            </p>
           </div>
         )}
       </div>

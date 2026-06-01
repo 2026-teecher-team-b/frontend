@@ -16,6 +16,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   isProfileModalOpen:       false,
   isFavoriteLoginModalOpen: false,
   toastMessage:             null,
+  viewMode:                 '3d',
 
   // ── Actions ──
   selectRepo: (repoId) =>
@@ -121,4 +122,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
     set({ toastMessage: msg })
     setTimeout(() => set({ toastMessage: null }), durationMs)
   },
+
+  // ── 뷰 모드 (2D / 3D) ───────────────────────────────────────────
+  setViewMode: (mode) => set({ viewMode: mode }),
 }))

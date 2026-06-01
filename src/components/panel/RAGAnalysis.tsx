@@ -30,7 +30,7 @@ export default function RAGAnalysis({ owner, repo }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const typewriterRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const { data, isLoading, isError } = useRagExplain(
+  const { data, isLoading, isError, error } = useRagExplain(
     owner || null,
     repo  || null,
     submittedQuestion,
@@ -118,10 +118,20 @@ export default function RAGAnalysis({ owner, repo }: Props) {
       {isError && !isLoading && (
         <div className="py-2">
           <p className="text-[10px] text-red-400/70 font-mono leading-relaxed">
-            분석에 실패했습니다.
+            ✕ 분석에 실패했습니다.
           </p>
-          <p className="text-[9px] text-white/25 font-mono mt-1">
-            RAG 서버가 준비 중이거나, 이 저장소의 데이터가 아직 수집되지 않았을 수 있어요.
+          {/* 실제 에러 메시지 표시 — 디버깅용 */}
+          {error && (
+            <p className="text-[9px] text-red-300/50 font-mono mt-1 break-all leading-relaxed">
+              {(error as Error & { response?: { status?: number; data?: unknown } }).response
+                ? `HTTP ${(error as Error & { response?: { status?: number } }).response?.status} — ${
+                    JSON.stringify((error as Error & { response?: { data?: unknown } }).response?.data)
+                  }`
+                : (error as Error).message}
+            </p>
+          )}
+          <p className="text-[9px] text-white/20 font-mono mt-1.5">
+            RAG 서버 상태 또는 저장소 데이터 수집 여부를 확인하세요.
           </p>
           <button
             onClick={() => setSubmittedQuestion(null)}

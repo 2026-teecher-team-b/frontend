@@ -13,6 +13,7 @@ import HelpOverlay from '@/components/overlay/HelpOverlay'
 import LoginButton from '@/components/overlay/LoginButton'
 import FavoriteLoginModal from '@/components/overlay/FavoriteLoginModal'
 import GalaxyStats from '@/components/overlay/GalaxyStats'
+import ViewToggle from '@/components/overlay/ViewToggle'
 import ToastNotification from '@/components/overlay/ToastNotification'
 import LandingPage from '@/pages/LandingPage'
 import { useUIStore } from '@/store/useUIStore'
@@ -311,19 +312,35 @@ export default function App() {
         </Suspense>
       </ErrorBoundary>
 
-      {/* ── 상태 표시 (좌상단) ── */}
-      <div className="absolute top-4 left-4 text-xs text-white/40 font-mono pointer-events-none z-10 flex items-center gap-2">
+      {/* ── 상태 표시 (좌상단) — HUD 스타일 ── */}
+      <div className="absolute top-4 left-4 pointer-events-none z-10 flex items-center gap-2" style={{ fontFamily: 'inherit' }}>
         <span
-          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors duration-1000 ${
-            isConnected ? 'bg-green-400' : 'bg-white/20'
-          }`}
-          title={isConnected ? '백엔드 연결됨' : '연결 대기 중'}
+          className="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors duration-1000"
+          style={{
+            backgroundColor: isConnected ? '#00d4ff' : 'rgba(255,255,255,0.15)',
+            boxShadow:       isConnected ? '0 0 6px rgba(0,212,255,0.8)' : 'none',
+          }}
+          title={isConnected ? 'SIGNAL ACQUIRED' : 'AWAITING SIGNAL...'}
         />
-        <span>GitHub Galaxy</span>
+        <span
+          className="text-[10px] tracking-[0.22em] uppercase"
+          style={{ color: 'rgba(0,212,255,0.55)' }}
+        >
+          깃허브 갤럭시
+        </span>
+        <span style={{ color: 'rgba(0,212,255,0.18)', fontSize: 10 }}>//</span>
+        <span
+          className="text-[9px] tracking-widest"
+          style={{ color: isConnected ? 'rgba(0,212,255,0.38)' : 'rgba(255,62,62,0.50)' }}
+        >
+          {isConnected ? '온라인' : '연결 중...'}
+        </span>
         {lastUpdatedAt && (
           <>
-            <span className="text-white/20">·</span>
-            <span className="text-white/25 text-[10px]">{timeSince(lastUpdatedAt)} 갱신</span>
+            <span style={{ color: 'rgba(0,212,255,0.12)', fontSize: 9 }}>·</span>
+            <span className="text-[9px] tracking-widest" style={{ color: 'rgba(0,212,255,0.25)' }}>
+              {timeSince(lastUpdatedAt)} 동기화
+            </span>
           </>
         )}
       </div>
@@ -342,6 +359,9 @@ export default function App() {
 
       {/* 은하 통계 (범례 위) */}
       <GalaxyStats />
+
+      {/* 2D/3D 뷰 전환 (우하단, ? 버튼 왼쪽) */}
+      <ViewToggle />
 
       {/* 조작 도움말 (우하단) */}
       <HelpOverlay />

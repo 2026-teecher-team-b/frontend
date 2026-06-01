@@ -22,14 +22,21 @@ export function useRagExplain(
   repo: string | null,
   question: string | null,
 ) {
-  return useQuery<string>({
+  return useQuery<string, Error>({
     queryKey: ['rag-explain', owner, repo, question],
     queryFn: () =>
       apiClient
         .get<ExplainResponse>(`/repos/${owner}/${repo}/explain`, {
-          params: { q: question },
+          params:  { q: question },
+          timeout: 90_000,   // RAG/LLM은 최대 90초 허용 (글로벌 10s 오버라이드)
         })
-        .then((r) => r.data.answer),
+        .then((r) => {
+          // 응답 구조 검증 — answer 필드가 없으면 명확한 에러
+          if (!r.data?.answer) {
+            throw new Error(`응답에 answer 필드가 없습니다: ${JSON.stringify(r.data)}`)
+          }
+          return r.data.answer
+        }),
     enabled: !!owner && !!repo && !!question,
     staleTime: 10 * 60 * 1000,
     retry: false,

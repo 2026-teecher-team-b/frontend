@@ -1,33 +1,69 @@
 /**
- * Scene.tsx — 3D 씬 최상위  v3 (Wormhole)
+ * Scene.tsx — 3D 씬 최상위  v4 (Galaxy Disc)
  *
  * 포함 요소:
- *  - 조명 (ambient + wormhole 테마 3점 조명)
+ *  - 조명 (ambient + 은하 테마 3점 조명)
  *  - 배경 은하 파티클 (drei Stars)
- *  - WormholeFunnel  : 깔때기 격자 + 빛 고리
+ *  - GalaxyCore   : 은하 핵 + 동심원 링 + 나선팔 가이드
+ *  - GalaxyGrid   : 갈락틱 평면 격자 (Y=0)
  *  - StarConnections : 같은 언어 별 사이 연결선
- *  - Star × 1000     : 저장소 별 (깔때기 물리 적용)
- *  - MeteorEffect    : 유성 이펙트
- *  - SpaceControls   : 드래그 탐험 카메라
- *  - usePhysics      : 깔때기 물리 루프
+ *  - InstancedStarField : 저장소 별 (은하 물리 적용)
+ *  - MeteorEffect  : 유성 이펙트
+ *  - SpaceControls : 드래그 탐험 카메라 (2D/3D 뷰 모드 지원)
+ *  - usePhysics    : 은하 물리 루프
  *
- * v3 변경:
- *  - Cluster 제거 (깔때기 구조에서 언어별 성단 불필요)
- *  - WormholeFunnel, StarConnections 추가
- *  - 조명 색상 → 차갑고 깊은 우주 톤 (파랑/보라)
+ * v4 변경:
+ *  - WormholeFunnel → GalaxyCore (은하 핵)
+ *  - InfiniteGrid → 갈락틱 평면 격자 (Y=0)
+ *  - 카메라 시작 위치 → [0, 150, 280] (은하 디스크 3/4 각도 뷰)
+ *  - 조명 → 따뜻한 코어 중심 + 차가운 외곽
  */
 
-import { Suspense } from 'react'
+import { Suspense, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Stars as DreiStars, Preload } from '@react-three/drei'
+import * as THREE from 'three'
 import InstancedStarField from './objects/InstancedStarField'
-import WormholeFunnel from './objects/WormholeFunnel'
+import GalaxyCore from './objects/GalaxyCore'
 import StarConnections from './objects/StarConnections'
-import InfiniteGrid from './objects/InfiniteGrid'
 import MeteorEffect from './effects/MeteorEffect'
 import SpaceControls, { wasPointerDrag } from './controls/SpaceControls'
 import { useUIStore } from '@/store/useUIStore'
 import { usePhysics } from '@/hooks/3d/usePhysics'
+
+// ── 갈락틱 평면 격자 (인라인 컴포넌트) ──────────────────────────────
+function GalaxyGrid() {
+  const bigGrid = useMemo(() => {
+    const helper = new THREE.GridHelper(4000, 80, 0x061828, 0x030d18)
+    const mats = Array.isArray(helper.material) ? helper.material : [helper.material]
+    mats.forEach((m) => {
+      m.transparent = true
+      m.opacity     = 0.18
+      m.depthWrite  = false
+      ;(m as THREE.LineBasicMaterial).blending = THREE.AdditiveBlending
+    })
+    return helper
+  }, [])
+
+  const midGrid = useMemo(() => {
+    const helper = new THREE.GridHelper(800, 80, 0x0a2a4a, 0x061828)
+    const mats = Array.isArray(helper.material) ? helper.material : [helper.material]
+    mats.forEach((m) => {
+      m.transparent = true
+      m.opacity     = 0.12
+      m.depthWrite  = false
+      ;(m as THREE.LineBasicMaterial).blending = THREE.AdditiveBlending
+    })
+    return helper
+  }, [])
+
+  return (
+    <>
+      <primitive object={bigGrid} />
+      <primitive object={midGrid} />
+    </>
+  )
+}
 
 // ── GalaxyScene — Canvas 내부 ────────────────────────────────────
 function GalaxyScene() {
@@ -37,41 +73,40 @@ function GalaxyScene() {
     <>
       {/* ── 조명 ──────────────────────────────────────────────── */}
       {/* ambient: 아주 어두운 심우주 톤 */}
-      <ambientLight intensity={0.12} />
-      {/* 메인 포인트: 깔때기 중앙 위에서 아래로 */}
-      <pointLight position={[0, 200, 0]}       intensity={1.8} color="#88bbff" />
-      {/* 보조 1: 왼쪽 아래 — 차가운 파란빛 */}
-      <pointLight position={[-200, -80, 50]}   intensity={0.6} color="#2244aa" />
-      {/* 보조 2: 오른쪽 — 약한 보라 */}
-      <pointLight position={[ 180, 60, -80]}   intensity={0.4} color="#6622aa" />
-      {/* 목(throat) 조명: 붉은 빛 */}
-      <pointLight position={[0, -160, 0]}      intensity={1.2} color="#ff3300" distance={120} decay={2} />
+      <ambientLight intensity={0.10} />
+      {/* 코어 메인 포인트: 은하 중심에서 따뜻한 황금빛 */}
+      <pointLight position={[0, 80, 0]}        intensity={2.2} color="#ffcc66" distance={300} decay={1.5} />
+      {/* 코어 보조: 아래쪽에서 은은한 오렌지 */}
+      <pointLight position={[0, -60, 0]}       intensity={0.8} color="#ff8800" distance={200} decay={2} />
+      {/* 외곽 좌측: 차가운 파랑 (나선팔 조명) */}
+      <pointLight position={[-250, 30, 80]}    intensity={0.45} color="#2244aa" />
+      {/* 외곽 우측: 약한 청록 (반대쪽 나선팔) */}
+      <pointLight position={[ 220, 20, -120]}  intensity={0.35} color="#00aacc" />
 
       {/* ── 배경 은하 파티클 ──────────────────────────────────── */}
       <DreiStars
         radius={1200}
-        depth={180}
-        count={14000}
+        depth={200}
+        count={16000}
         factor={3}
-        saturation={0.06}
+        saturation={0.05}
         fade
-        speed={0.05}
+        speed={0.04}
       />
 
-      {/* ── 깔때기 구조물 ─────────────────────────────────────── */}
-      <WormholeFunnel />
+      {/* ── 은하 핵 (코어 + 링 + 나선팔 가이드) ─────────────── */}
+      <GalaxyCore />
 
-      {/* ── 상단 무한 격자 ────────────────────────────────────── */}
-      <InfiniteGrid />
+      {/* ── 갈락틱 평면 격자 ──────────────────────────────────── */}
+      <GalaxyGrid />
 
       {/* ── 별 사이 연결선 ────────────────────────────────────── */}
       <StarConnections />
 
-      {/* ── 저장소 별 (InstancedMesh — draw call 1회로 수만 개 처리) ── */}
-      {/* Suspense 밖에 배치 — Preload가 suspend 되더라도 별은 항상 렌더링 */}
+      {/* ── 저장소 별 (InstancedMesh — draw call 1회) ── */}
       <InstancedStarField />
 
-      {/* ── 비동기 에셋 프리로드 (별과 별도 Suspense로 분리) ── */}
+      {/* ── 비동기 에셋 프리로드 ───────────────────────────────── */}
       <Suspense fallback={null}>
         <Preload all />
       </Suspense>
@@ -90,12 +125,11 @@ export default function Scene() {
   return (
     <Canvas
       flat
-      camera={{ position: [280, 60, 0], fov: 58, near: 0.1, far: 3000 }}
+      camera={{ position: [0, 150, 280], fov: 55, near: 0.1, far: 3000 }}
       gl={{ antialias: true, alpha: false }}
       style={{ background: '#01020a' }}
       frameloop="always"
       onPointerMissed={() => {
-        // 드래그 직후엔 패널 닫지 않음 (회전 후 의도치 않은 닫힘 방지)
         if (!wasPointerDrag()) useUIStore.getState().closePanel()
       }}
     >

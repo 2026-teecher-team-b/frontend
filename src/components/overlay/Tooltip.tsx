@@ -1,5 +1,5 @@
 /**
- * Tooltip.tsx — 별 hover 미리보기 툴팁
+ * Tooltip.tsx — 별 hover 미리보기 툴팁 (HUD 리디자인)
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { useUIStore } from '@/store/useUIStore'
@@ -8,10 +8,10 @@ import { formatCount } from '@/utils/format'
 import { getLanguageColor } from '@/utils/physics'
 
 function trendLabel(delta: number) {
-  if (delta > 15) return { text: '🔥 급등',  cls: 'text-orange-400' }
-  if (delta > 5)  return { text: '↑ 상승',   cls: 'text-green-400' }
-  if (delta < -5) return { text: '↓ 하락',   cls: 'text-red-400' }
-  return             { text: '→ 안정',   cls: 'text-gray-400' }
+  if (delta > 15) return { text: '▲▲ 급상승',  color: '#ff8c00' }
+  if (delta > 5)  return { text: '▲ 상승',    color: '#00ff88' }
+  if (delta < -5) return { text: '▼ 하락',    color: '#ff3e3e' }
+  return             { text: '─ 안정',     color: 'rgba(0,212,255,0.45)' }
 }
 
 export default function Tooltip() {
@@ -33,8 +33,8 @@ export default function Tooltip() {
   const syncPosition = useCallback(() => {
     if (tooltipRef.current && visibleRef.current) {
       const { x, y } = posRef.current
-      const offsetX = x + 200 > window.innerWidth  ? -210 : 16
-      const offsetY = y + 140 > window.innerHeight ? -140 : 12
+      const offsetX = x + 220 > window.innerWidth  ? -226 : 18
+      const offsetY = y + 150 > window.innerHeight ? -148 : 14
       tooltipRef.current.style.transform = `translate(${x + offsetX}px,${y + offsetY}px)`
     }
     rafRef.current = requestAnimationFrame(syncPosition)
@@ -55,46 +55,92 @@ export default function Tooltip() {
   const score     = hoveredRepoId ? scores[hoveredRepoId] : undefined
   const langColor = getLanguageColor(repo?.language ?? null)
   const trend     = score ? trendLabel(score.trendDelta) : null
+  const isBlackHole = (score?.healthScore ?? 50) < 2
 
   return (
     <div
       ref={tooltipRef}
       className="fixed top-0 left-0 z-50 pointer-events-none"
-      style={{ opacity: 0, transition: 'opacity 0.12s ease', willChange: 'transform' }}
+      style={{ opacity: 0, transition: 'opacity 0.10s ease', willChange: 'transform' }}
     >
       {repo && (
-        <div className="bg-black/90 border border-white/10 rounded-xl px-3 py-2.5 shadow-2xl backdrop-blur-sm min-w-[160px]">
-          <p className="text-white text-sm font-mono font-semibold truncate max-w-[200px]">{repo.name}</p>
-          <p className="text-white/40 text-[10px] font-mono truncate max-w-[200px]">{repo.fullName}</p>
+        <div
+          className="relative min-w-[170px] max-w-[210px]"
+          style={{
+            background:     'rgba(0,8,20,0.95)',
+            border:         '1px solid rgba(0,212,255,0.22)',
+            backdropFilter: 'blur(10px)',
+          }}
+        >
+          {/* Corner brackets */}
+          <span className="absolute top-0 left-0 w-2.5 h-2.5 border-t border-l" style={{ borderColor: 'rgba(0,212,255,0.60)' }} />
+          <span className="absolute top-0 right-0 w-2.5 h-2.5 border-t border-r" style={{ borderColor: 'rgba(0,212,255,0.60)' }} />
+          <span className="absolute bottom-0 left-0 w-2.5 h-2.5 border-b border-l" style={{ borderColor: 'rgba(0,212,255,0.60)' }} />
+          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 border-b border-r" style={{ borderColor: 'rgba(0,212,255,0.60)' }} />
+
+          {/* Repo header */}
+          <div className="px-3 py-2" style={{ borderBottom: '1px solid rgba(0,212,255,0.08)' }}>
+            <p className="text-[11px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.90)' }}>
+              {repo.name}
+            </p>
+            <p className="text-[9px] truncate mt-0.5" style={{ color: 'rgba(0,212,255,0.38)' }}>
+              {repo.fullName}
+            </p>
+          </div>
+
+          {/* Language */}
           {repo.language && (
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: langColor }} />
-              <span className="text-[11px] text-white/70 font-mono">{repo.language}</span>
+            <div className="px-3 pt-2 pb-1 flex items-center gap-1.5">
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: langColor, boxShadow: `0 0 5px ${langColor}` }}
+              />
+              <span className="text-[9px] tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                {repo.language}
+              </span>
+              {isBlackHole && (
+                <span className="text-[8px] tracking-widest ml-auto" style={{ color: '#ff3e3e' }}>
+                  ⬤ 블랙홀
+                </span>
+              )}
             </div>
           )}
+
+          {/* Metrics */}
           {score && (
-            <div className="mt-2 flex gap-3">
-              <div className="text-center">
-                <p className="text-[9px] text-white/40 font-mono">활동</p>
-                <p className="text-xs text-blue-300 font-mono font-bold">{score.activityScore}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[9px] text-white/40 font-mono">건강</p>
-                <p className={`text-xs font-mono font-bold ${score.healthScore < 10 ? 'text-red-400' : score.healthScore < 40 ? 'text-orange-400' : 'text-green-400'}`}>
-                  {score.healthScore}
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-[9px] text-white/40 font-mono">Stars</p>
-                <p className="text-xs text-yellow-300 font-mono font-bold">
-                  {repo.starCount != null ? formatCount(repo.starCount) : '—'}
-                </p>
-              </div>
+            <div
+              className="px-3 py-2 grid grid-cols-3 gap-2"
+              style={{ borderTop: '1px solid rgba(0,212,255,0.06)' }}
+            >
+              {[
+                { label: '활성',   value: score.activityScore, color: '#00d4ff' },
+                { label: '건강',   value: score.healthScore,
+                  color: score.healthScore < 10 ? '#ff3e3e' : score.healthScore < 40 ? '#ffaa00' : '#00ff88' },
+                { label: '★',     value: repo.starCount != null ? formatCount(repo.starCount) : '—',
+                  color: '#ffc23a' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="text-center">
+                  <p className="text-[8px] tracking-widest uppercase mb-0.5" style={{ color: 'rgba(0,212,255,0.30)' }}>
+                    {label}
+                  </p>
+                  <p className="text-[11px] font-bold tabular-nums" style={{ color }}>
+                    {value}
+                  </p>
+                </div>
+              ))}
             </div>
           )}
-          {trend && <p className={`text-[10px] font-mono mt-1.5 ${trend.cls}`}>{trend.text}</p>}
-          {score && score.healthScore < 10 && (
-            <p className="text-[10px] text-red-400 font-mono mt-1 animate-pulse">⚠ 블랙홀 전환 중</p>
+
+          {/* Trend */}
+          {trend && (
+            <div
+              className="px-3 py-1.5 flex items-center"
+              style={{ borderTop: '1px solid rgba(0,212,255,0.06)' }}
+            >
+              <span className="text-[9px] tracking-widest uppercase" style={{ color: trend.color }}>
+                {trend.text}
+              </span>
+            </div>
           )}
         </div>
       )}

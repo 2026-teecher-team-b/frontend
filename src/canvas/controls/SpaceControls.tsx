@@ -35,8 +35,8 @@ export function wasPointerDrag(): boolean { return _dragMoved }
 // ── 상수 ──────────────────────────────────────────────────────────
 const ROTATION_SPEED   = 0.0040   // rad / px
 const MIN_PHI          = 0.04     // 최소 앙각 (거의 수평)
-const MAX_PHI          = Math.PI / 2.3   // 최대 앙각 (~78°)
-const MIN_RADIUS       = 80
+const MAX_PHI          = Math.PI / 2 - 0.01  // 최대 앙각 (~89°, 거의 수직)
+const MIN_RADIUS       = 60
 const MAX_RADIUS       = 900
 const INERTIA_DECAY    = 0.88
 const INERTIA_STOP     = 0.000_05
@@ -44,10 +44,14 @@ const TARGET_LERP      = 0.055    // lookAt 타겟 보간 속도
 const RADIUS_LERP      = 0.06     // 줌 보간 속도
 const FOCUS_RADIUS     = 100      // 별 클릭 시 자동 줌인 거리
 
-// 초기 카메라 위치 [280, 60, 0] → 구면 좌표
-const INIT_RADIUS = Math.sqrt(280 * 280 + 60 * 60)   // ≈ 287
-const INIT_THETA  = 0                                  // atan2(0, 280)
-const INIT_PHI    = Math.atan2(60, 280)                // ≈ 0.21 rad
+// 초기 카메라 위치 [0, 150, 280] → 구면 좌표
+const INIT_RADIUS = Math.sqrt(150 * 150 + 280 * 280)  // ≈ 317
+const INIT_THETA  = Math.PI / 2                         // atan2(280, 0) = π/2
+const INIT_PHI    = Math.atan2(150, 280)               // ≈ 0.49 rad
+
+// 2D 모드: 거의 수직으로 내려다보는 앙각
+const PHI_2D = Math.PI / 2 - 0.01
+const RADIUS_2D = 320
 
 export default function SpaceControls() {
   const { camera, gl } = useThree()
@@ -80,18 +84,31 @@ export default function SpaceControls() {
 
   // ── 매 프레임 ─────────────────────────────────────────────────────
   useFrame(() => {
+    const viewMode = useUIStore.getState().viewMode
+
+    // ── 2D 모드: φ 를 수직으로 고정, radius 목표 설정 ──────────────
+    if (viewMode === '2d') {
+      sph.current.phi = PHI_2D
+      vel.current.phi = 0
+      if (radiusTarget.current > RADIUS_2D) radiusTarget.current = RADIUS_2D
+    }
+
     // ── 1. 관성 반영 ──────────────────────────────────────────────
     if (!isDragging.current) {
       sph.current.theta += vel.current.theta
-      sph.current.phi   += vel.current.phi
+      if (viewMode === '3d') {
+        sph.current.phi += vel.current.phi
+      }
       vel.current.theta *= INERTIA_DECAY
       vel.current.phi   *= INERTIA_DECAY
       if (Math.abs(vel.current.theta) < INERTIA_STOP) vel.current.theta = 0
       if (Math.abs(vel.current.phi)   < INERTIA_STOP) vel.current.phi   = 0
     }
 
-    // φ 클램핑
-    sph.current.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, sph.current.phi))
+    // φ 클램핑 (3D 모드에서만 적용)
+    if (viewMode === '3d') {
+      sph.current.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, sph.current.phi))
+    }
 
     // ── 2. lookAt 타겟 결정 + 자동 줌인/아웃 ─────────────────────
     const followedId = useUIStore.getState().followedRepoId
@@ -162,10 +179,13 @@ export default function SpaceControls() {
       const dTheta = dx * ROTATION_SPEED
       const dPhi   = -dy * ROTATION_SPEED
 
+      const is2D = useUIStore.getState().viewMode === '2d'
       sph.current.theta += dTheta
-      sph.current.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, sph.current.phi + dPhi))
+      if (!is2D) {
+        sph.current.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, sph.current.phi + dPhi))
+      }
 
-      vel.current = { theta: dTheta, phi: dPhi }
+      vel.current = { theta: dTheta, phi: is2D ? 0 : dPhi }
       lastMouse.current = { x: e.clientX, y: e.clientY }
     }
 

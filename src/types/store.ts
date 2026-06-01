@@ -65,6 +65,9 @@ export interface UIState {
   isFavoriteLoginModalOpen: boolean
   /** 갱신 토스트 메시지 (null이면 숨김) */
   toastMessage: string | null
+
+  /** 뷰 모드: 3D 회전 or 2D 위에서 아래 */
+  viewMode: '3d' | '2d'
 }
 
 export interface UIActions {
@@ -92,6 +95,8 @@ export interface UIActions {
   closeFavoriteLoginModal: () => void
 
   showToast: (msg: string, durationMs?: number) => void
+
+  setViewMode: (mode: '3d' | '2d') => void
 }
 
 export type UIStore = UIState & UIActions

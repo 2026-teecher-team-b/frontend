@@ -60,10 +60,10 @@ const MAX_INSTANCES = 2000
 
 /**
  * 별 크기 배율.
- * MeshBasicMaterial은 emissive 글로우가 없으므로 카메라(~280 units)에서
- * 선명하게 보이려면 scoreToRadius 결과값을 크게 키워야 함.
+ * 카메라(~317 units)에서 은하 전체가 보이는 시야 기준.
+ * 너무 크면 별들이 겹쳐 은하 구조가 안 보이므로 2.5로 축소.
  */
-const STAR_SCALE = 5.0
+const STAR_SCALE = 2.5
 
 // ── 재사용 Three.js 객체 (GC 방지) ─────────────────────────────────
 const _mat   = new THREE.Matrix4()

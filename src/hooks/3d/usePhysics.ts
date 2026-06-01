@@ -1,19 +1,9 @@
 /**
- * usePhysics.ts — 깔때기 물리 시뮬레이션 (Web Worker 기반)  v4
+ * usePhysics.ts — 나선 은하 물리 시뮬레이션 (Web Worker 기반)  v4
  *
- * v4 변경: 물리 루프를 Web Worker로 분리
- *  - 메인 스레드: 렌더링만 담당 (scripting 부담 감소)
- *  - Worker:     매 tick 마다 위치 계산 → Float32Array(zero-copy) 전송
- *
- * Worker 동기화 전략:
- *  1. 마운트 시: physicsStore 기존 entries 전부 Worker에 등록
- *  2. register/unregister: physicsStore 콜백으로 Worker 실시간 동기화
- *  3. scores:   Zustand 참조가 바뀔 때만 postMessage (매 프레임 직렬화 ✕)
- *  4. tick:     매 프레임 { dt, time } 만 전송 (경량)
- *  5. Worker → 메인: ArrayBuffer transfer (zero-copy), physicsStore에 적용
- *
- * Worker 불가 환경 폴백:
- *  - typeof Worker === 'undefined' → 메인 스레드에서 동기 실행 (구형 환경 대비)
+ * v4 변경: 웜홀 깔때기 → 나선 은하 디스크
+ *  - Worker에 armAngle 전달
+ *  - 메인 스레드 폴백도 은하 물리로 교체
  */
 
 import { useEffect, useRef } from 'react'
@@ -21,47 +11,58 @@ import { useFrame }          from '@react-three/fiber'
 import { physicsStore }      from '@/store/physicsStore'
 import { useGalaxyStore }    from '@/store/useGalaxyStore'
 
-// ── 메인 스레드 폴백 (Worker 불가 환경) ─────────────────────────────
-// Worker가 있으면 이 경로는 실행되지 않는다.
 import {
-  activityToY,
-  funnelRadius,
-  FUNNEL_LERP_SPEED,
-  BASE_THETA_SPEED,
+  activityToGalaxyRadius,
+  spiralTheta,
+  GALAXY_R_INNER,
+  GALAXY_H_AMP,
+  BASE_ORBIT_SPEED,
+  GALAXY_R_LERP,
+  BH_R_PULL,
   BH_THETA_MULT,
-  SURFACE_NOISE_AMP,
   BLACKHOLE_HEALTH_THRESHOLD,
 } from '@/utils/physics'
 
+// ── 메인 스레드 폴백 (Worker 불가 환경) ──────────────────────────────
 function runPhysicsSync(dt: number, time: number) {
   const scores  = useGalaxyStore.getState().scores
   const entries = physicsStore.getAll()
+
   for (const e of entries) {
     const score       = scores[e.repoId]
     const activity    = score?.activityScore ?? 50
     const isBlackHole = (score?.healthScore ?? 50) < BLACKHOLE_HEALTH_THRESHOLD
-    const targetY     = activityToY(activity)
-    const lerpSpeed   = isBlackHole ? FUNNEL_LERP_SPEED * 3.5 : FUNNEL_LERP_SPEED
-    e.currentY += (targetY - e.currentY) * Math.min(lerpSpeed * 60 * dt, 1)
-    const thetaMult = isBlackHole ? BH_THETA_MULT : 1.0
-    e.theta += e.thetaSpeed * BASE_THETA_SPEED * thetaMult * dt
-    const noise = Math.sin(time * 0.6 + e.noisePhase) * SURFACE_NOISE_AMP
-    const y = e.currentY + noise
-    const r = funnelRadius(y)
-    e.position.set(r * Math.cos(e.theta), y, r * Math.sin(e.theta))
+
+    // 반지름 lerp
+    const targetR = activityToGalaxyRadius(activity)
+    const rLerp   = isBlackHole ? GALAXY_R_LERP * 3.5 : GALAXY_R_LERP
+    e.currentR += (targetR - e.currentR) * Math.min(rLerp * 60 * dt, 1)
+    if (isBlackHole) e.currentR += (GALAXY_R_INNER * 0.4 - e.currentR) * BH_R_PULL
+
+    const r = Math.max(GALAXY_R_INNER * 0.3, e.currentR)
+
+    // 궤도 각도 (Kepler)
+    const keplerFactor = Math.sqrt(GALAXY_R_INNER / r)
+    const bhMult = isBlackHole ? BH_THETA_MULT : 1.0
+    e.orbitAngle += e.thetaSpeed * BASE_ORBIT_SPEED * keplerFactor * bhMult * dt
+
+    // 3D 위치
+    const theta = spiralTheta(e.armAngle, r, e.orbitAngle)
+    const rNorm = 1 - (r - GALAXY_R_INNER) / (185 - GALAXY_R_INNER)
+    const y = GALAXY_H_AMP * Math.sin(time * 0.35 + e.noisePhase) * Math.max(0, rNorm)
+
+    e.position.set(r * Math.cos(theta), y, r * Math.sin(theta))
     if (e.object) e.object.position.copy(e.position)
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────
 export function usePhysics() {
-  const workerRef   = useRef<Worker | null>(null)
-  const pendingRef  = useRef(false)          // Worker 응답 대기 중 여부
-  const scoresRef   = useRef<object | null>(null)  // 마지막으로 전송한 scores 참조
+  const workerRef  = useRef<Worker | null>(null)
+  const pendingRef = useRef(false)
+  const scoresRef  = useRef<object | null>(null)
 
-  // ── Worker 초기화 ─────────────────────────────────────────────
   useEffect(() => {
-    // Web Worker 미지원 환경 (SSR, 구형 브라우저) — 폴백으로 진행
     if (typeof Worker === 'undefined') return
 
     const worker = new Worker(
@@ -70,11 +71,9 @@ export function usePhysics() {
     )
     workerRef.current = worker
 
-    // Worker → 메인: 위치 배열 수신
     worker.onmessage = (event: MessageEvent) => {
       pendingRef.current = false
       if (event.data.type !== 'positions') return
-
       const data = event.data.data as Float32Array
       for (let i = 0; i < data.length; i += 4) {
         const repoId = data[i]
@@ -85,28 +84,27 @@ export function usePhysics() {
       }
     }
 
-    worker.onerror = (err) => {
-      console.error('[PhysicsWorker]', err.message, err)
-    }
+    worker.onerror = (err) => { console.error('[GalaxyWorker]', err.message) }
 
-    // ── 기존 physicsStore entries 초기 등록 ───────────────────────
+    // 기존 entries 초기 등록
     const initialScores = useGalaxyStore.getState().scores
     physicsStore.entries.forEach((entry) => {
       worker.postMessage({
         type:          'register',
         repoId:        entry.repoId,
         activityScore: initialScores[entry.repoId]?.activityScore ?? 50,
+        armAngle:      entry.armAngle,
       })
     })
 
-    // ── register / unregister 콜백 주입 ───────────────────────────
-    // physicsStore.register() 호출 시 Worker에 즉시 알림
+    // register / unregister 콜백 — armAngle 포함
     physicsStore.onRegister = (entry) => {
       const s = useGalaxyStore.getState().scores
       worker.postMessage({
         type:          'register',
         repoId:        entry.repoId,
         activityScore: s[entry.repoId]?.activityScore ?? 50,
+        armAngle:      entry.armAngle,
       })
     }
     physicsStore.onUnregister = (repoId) => {
@@ -122,33 +120,24 @@ export function usePhysics() {
     }
   }, [])
 
-  // ── 매 프레임 tick 전송 ───────────────────────────────────────
   useFrame((state, delta) => {
     const dt   = Math.min(delta, 0.05)
     const time = state.clock.elapsedTime
-
     const worker = workerRef.current
 
-    // ── Worker 없음 → 메인 스레드 폴백 ───────────────────────────
-    if (!worker) {
-      runPhysicsSync(dt, time)
-      return
-    }
+    if (!worker) { runPhysicsSync(dt, time); return }
 
-    // scores 참조가 바뀐 경우에만 직렬화·전송 (매 프레임 아님)
     const scores = useGalaxyStore.getState().scores
     if (scores !== scoresRef.current) {
       scoresRef.current = scores
       worker.postMessage({ type: 'updateScores', scores })
     }
 
-    // 이전 tick 응답을 아직 받지 못한 경우 스킵 (큐 과부하 방지)
     if (pendingRef.current) return
     pendingRef.current = true
     worker.postMessage({ type: 'tick', dt, time })
   })
 }
 
-// ── 하위 호환 export ─────────────────────────────────────────────
 export { lerp }     from '@/utils/physics'
 export { lerpStep } from '@/hooks/3d/useLerp'
