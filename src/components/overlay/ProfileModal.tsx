@@ -161,7 +161,7 @@ export default function ProfileModal() {
         </div>
 
         {/* ── 하단 액션 ────────────────────────────────────────── */}
-        <div className="px-3 pb-3 pt-0 border-t border-white/8 mt-1 pt-2 flex items-center gap-2">
+        <div className="px-3 pb-3 border-t border-white/8 mt-1 pt-2 flex items-center gap-2">
           {/* GitHub 프로필 바로가기 */}
           <a
             href={`https://github.com/${user.githubLogin}`}

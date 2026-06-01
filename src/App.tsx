@@ -1,5 +1,4 @@
-import { useEffect, useCallback, useState } from 'react'
-import Scene from '@/canvas/Scene'
+import { lazy, Suspense, useEffect, useCallback, useState } from 'react'
 import FrameMonitor from '@/canvas/effects/FrameMonitor'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
 import { apiClient } from '@/api/axios'
@@ -8,18 +7,20 @@ import { useInterval } from '@/hooks/useInterval'
 import { timeSince } from '@/utils/format'
 // ── 2D UI 컴포넌트 ──────────────────────────────────────────────────
 import ErrorBoundary from '@/components/common/ErrorBoundary'
-import SidePanel from '@/components/panel/SidePanel'
 import Tooltip from '@/components/overlay/Tooltip'
 import Legend from '@/components/overlay/Legend'
 import HelpOverlay from '@/components/overlay/HelpOverlay'
 import LoginButton from '@/components/overlay/LoginButton'
-import SearchBar from '@/components/overlay/SearchBar'
-import ProfileModal from '@/components/overlay/ProfileModal'
 import FavoriteLoginModal from '@/components/overlay/FavoriteLoginModal'
 import GalaxyStats from '@/components/overlay/GalaxyStats'
 import ToastNotification from '@/components/overlay/ToastNotification'
 import LandingPage from '@/pages/LandingPage'
 import { useUIStore } from '@/store/useUIStore'
+
+const Scene = lazy(() => import('@/canvas/Scene'))
+const SidePanel = lazy(() => import('@/components/panel/SidePanel'))
+const SearchBar = lazy(() => import('@/components/overlay/SearchBar'))
+const ProfileModal = lazy(() => import('@/components/overlay/ProfileModal'))
 
 /** 폴링 간격: 5분 (스케줄러 갱신 주기와 맞춤) */
 const POLL_INTERVAL_MS = 5 * 60 * 1000
@@ -242,7 +243,10 @@ export default function App() {
   }, [setRepositories, setScores, setConnected, setLastUpdatedAt, showToast])
 
   // ── 초기 로드 ─────────────────────────────────────────────────
-  useEffect(() => { loadRepos(false) }, [loadRepos])
+  useEffect(() => { 
+    if (showLanding) return
+    loadRepos(false)
+  }, [showLanding, loadRepos])
 
   // ── 5분 폴링 ─────────────────────────────────────────────────
   useInterval(() => loadRepos(true), POLL_INTERVAL_MS)
@@ -262,6 +266,8 @@ export default function App() {
 
   // ── 로그인 사용자 정보 — GET /auth/me ────────────────────────
   useEffect(() => {
+    if (showLanding) return
+
     apiClient.get('/auth/me')
       .then((res) => {
         if (res.data?.githubLogin) {
@@ -270,7 +276,7 @@ export default function App() {
         }
       })
       .catch(() => { /* 미로그인(401) → 무시 */ })
-  }, [setUser, loadFavorites])
+  }, [showLanding, setUser, loadFavorites])
 
   // ── 랜딩 → 메인 전환 ─────────────────────────────────────────
   const handleEnterGalaxy = () => {
@@ -300,7 +306,9 @@ export default function App() {
           </div>
         }
       >
-        <Scene />
+        <Suspense fallback={null}>
+          <Scene />
+        </Suspense>
       </ErrorBoundary>
 
       {/* ── 상태 표시 (좌상단) ── */}
@@ -320,14 +328,14 @@ export default function App() {
         )}
       </div>
 
-      {/* 검색바 */}
-      <SearchBar />
+      <Suspense fallback={null}>
+        <SearchBar />
+        <SidePanel />
+        <ProfileModal />
+      </Suspense>
 
       {/* 호버 툴팁 */}
       <Tooltip />
-
-      {/* 사이드 패널 */}
-      <SidePanel />
 
       {/* 언어 범례 (좌하단) */}
       <Legend />
@@ -342,7 +350,6 @@ export default function App() {
       <LoginButton />
 
       {/* ── 모달 레이어 ─────────────────────────────────────────── */}
-      <ProfileModal />
       <FavoriteLoginModal />
 
       {/* ── 토스트 알림 ─────────────────────────────────────────── */}
