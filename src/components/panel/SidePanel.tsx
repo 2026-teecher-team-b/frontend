@@ -8,11 +8,13 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { useUIStore } from '@/store/useUIStore'
 import { useGalaxyStore } from '@/store/useGalaxyStore'
-import { useScoreHistory } from '@/hooks/queries/useScoreHistory'
+import { useTimeline } from '@/hooks/queries/useTimeline'
+import { useTrendReason } from '@/hooks/queries/useTrendReason'
+import { useRepoStats } from '@/hooks/queries/useRepoStats'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import ScoreChart from './ScoreChart'
 import RAGAnalysis from './RAGAnalysis'
-import { timeAgo } from '@/utils/format'
+import { timeAgo, formatCount } from '@/utils/format'
 import { BLACKHOLE_HEALTH_THRESHOLD, getLanguageColor } from '@/utils/physics'
 
 export default function SidePanel() {
@@ -25,7 +27,36 @@ export default function SidePanel() {
   const score = selectedRepoId ? scores[selectedRepoId] : undefined
   const fav   = selectedRepoId ? isFavorite(selectedRepoId) : false
 
-  const { data: history } = useScoreHistory(isPanelOpen ? selectedRepoId : null)
+  const repoOwner  = repo ? (repo.owner ?? repo.fullName.split('/')[0]) : ''
+  const repoName   = repo?.name ?? ''
+  const active     = isPanelOpen && !!repo
+
+  // 활동 타임라인 (시간별 점수) — 활동 차트용
+  const { data: history } = useTimeline(
+    active ? repoOwner : null,
+    active ? repoName : null,
+    selectedRepoId,
+  )
+
+  // 점수(활동) 변화 이유 — LLM 생성 설명
+  const { data: trend, isLoading: trendLoading, isError: trendError } = useTrendReason(
+    active ? repoOwner : null,
+    active ? repoName : null,
+  )
+
+  // 스타/포크/이슈 수: 목록 API(/repos)가 기본 제공.
+  // 일부 값이 비어 있을 때만 검색 API(/repos/search)로 보강 → 평소엔 추가 요청 없음.
+  const needStats = active &&
+    (repo?.starCount == null || repo?.forkCount == null || repo?.openIssueCount == null)
+  const { data: stats } = useRepoStats(
+    needStats ? (repo?.fullName ?? null) : null,
+    selectedRepoId,
+  )
+
+  // 통계 표시값: store(목록 API) 우선, 없으면 검색 API로 폴백
+  const starCount  = repo?.starCount      ?? stats?.starCount
+  const forkCount  = repo?.forkCount      ?? stats?.forkCount
+  const issueCount = repo?.openIssueCount ?? stats?.openIssueCount
 
   const [panelWidth, setPanelWidth] = useState(320)
   const dragging = useRef(false)
@@ -58,8 +89,6 @@ export default function SidePanel() {
   }, [closePanel])
 
   const langColor  = getLanguageColor(repo?.language ?? null)
-  const repoOwner  = repo ? (repo.owner ?? repo.fullName.split('/')[0]) : ''
-  const repoName   = repo?.name ?? ''
   const isBlackHole = (score?.healthScore ?? 50) < BLACKHOLE_HEALTH_THRESHOLD
 
   const containerStyle = isMobile
@@ -125,7 +154,7 @@ export default function SidePanel() {
             {repo ? (
               <>
                 {/* Section label */}
-                <p className="text-[8px] tracking-[0.22em] uppercase mb-1.5" style={{ color: 'rgba(0,212,255,0.35)' }}>
+                <p className="text-[10px] tracking-[0.22em] uppercase mb-1.5" style={{ color: 'rgba(0,212,255,0.40)' }}>
                   ◈ 저장소 정보
                 </p>
                 <div className="flex items-center gap-2 mb-0.5">
@@ -139,18 +168,18 @@ export default function SidePanel() {
                     />
                   )}
                   <h2
-                    className="font-bold text-sm truncate"
-                    style={{ color: isBlackHole ? '#ff3e3e' : 'rgba(255,255,255,0.90)' }}
+                    className="font-bold text-lg truncate"
+                    style={{ color: isBlackHole ? '#ff3e3e' : 'rgba(255,255,255,0.92)' }}
                   >
                     {repo.name}
                   </h2>
                   {isBlackHole && (
-                    <span className="text-[8px] tracking-widest flex-shrink-0" style={{ color: '#ff3e3e' }}>
+                    <span className="text-[10px] tracking-widest flex-shrink-0" style={{ color: '#ff3e3e' }}>
                       ⬤ 블랙홀
                     </span>
                   )}
                 </div>
-                <p className="text-[10px] truncate" style={{ color: 'rgba(0,212,255,0.38)' }}>
+                <p className="text-[12px] truncate" style={{ color: 'rgba(0,212,255,0.42)' }}>
                   {repo.fullName}
                 </p>
               </>
@@ -163,7 +192,7 @@ export default function SidePanel() {
             {selectedRepoId && (
               <button
                 onClick={() => toggleFavorite(selectedRepoId)}
-                className="text-base transition-all"
+                className="text-base transition-all cursor-pointer"
                 style={{ color: fav ? '#ffc23a' : 'rgba(0,212,255,0.22)' }}
                 onMouseEnter={(e) => {
                   if (!fav) (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,194,58,0.55)'
@@ -176,7 +205,7 @@ export default function SidePanel() {
             )}
             <button
               onClick={closePanel}
-              className="w-6 h-6 flex items-center justify-center text-[10px] transition-all"
+              className="w-6 h-6 flex items-center justify-center text-[10px] transition-all cursor-pointer"
               style={{
                 color:      'rgba(0,212,255,0.40)',
                 border:     '1px solid rgba(0,212,255,0.15)',
@@ -201,7 +230,7 @@ export default function SidePanel() {
             {/* Score metrics */}
             {score && (
               <>
-                <p className="text-[8px] tracking-[0.22em] uppercase" style={{ color: 'rgba(0,212,255,0.32)' }}>
+                <p className="text-[11px] tracking-[0.22em] uppercase" style={{ color: 'rgba(0,212,255,0.35)' }}>
                   ▸ 성능 지표
                 </p>
                 <div className="grid grid-cols-3 gap-2">
@@ -232,42 +261,88 @@ export default function SidePanel() {
                     >
                       <span className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l" style={{ borderColor: 'rgba(0,212,255,0.40)' }} />
                       <span className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r" style={{ borderColor: 'rgba(0,212,255,0.40)' }} />
-                      <p className="text-[8px] tracking-widest uppercase mb-1" style={{ color: 'rgba(0,212,255,0.32)' }}>{label}</p>
-                      <p className="text-sm font-bold tabular-nums" style={{ color }}>{value}</p>
+                      <p className="text-[10px] tracking-widest uppercase mb-1" style={{ color: 'rgba(0,212,255,0.32)' }}>{label}</p>
+                      <p className="text-lg font-bold tabular-nums" style={{ color }}>{value}</p>
                     </div>
                   ))}
                 </div>
               </>
             )}
 
+            {/* 점수 변화 이유 (활동 트렌드) */}
+            <div>
+              <p className="text-[11px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.35)' }}>
+                ▸ 점수 변화 이유
+              </p>
+              {trendLoading && (
+                <p className="text-[12px] font-mono" style={{ color: 'rgba(0,212,255,0.30)' }}>
+                  분석 중…
+                </p>
+              )}
+              {!trendLoading && trendError && (
+                <p className="text-[12px] font-mono" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                  변화 이유를 불러오지 못했습니다.
+                </p>
+              )}
+              {!trendLoading && trend && (() => {
+                const tColor =
+                  trend.trend === '상승' ? '#00ff88'
+                  : trend.trend === '하락' ? '#ff3e3e'
+                  : 'rgba(0,212,255,0.55)'
+                const arrow = trend.trend === '상승' ? '▲' : trend.trend === '하락' ? '▼' : '─'
+                const rateText = `${trend.changeRate > 0 ? '+' : ''}${trend.changeRate.toFixed(1)}%`
+                return (
+                  <div
+                    className="p-2.5 space-y-1.5"
+                    style={{ background: 'rgba(0,212,255,0.03)', border: '1px solid rgba(0,212,255,0.10)' }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[14px] font-bold tracking-widest" style={{ color: tColor }}>
+                        {arrow} {trend.trend}
+                      </span>
+                      <span className="text-[13px] font-mono tabular-nums" style={{ color: tColor }}>
+                        {rateText}
+                      </span>
+                      <span className="text-[10px] font-mono ml-auto" style={{ color: 'rgba(0,212,255,0.25)' }}>
+                        7일 평균 대비
+                      </span>
+                    </div>
+                    <p className="text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.66)' }}>
+                      {trend.reason}
+                    </p>
+                  </div>
+                )
+              })()}
+            </div>
+
             {/* Stats */}
             <div>
-              <p className="text-[8px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.32)' }}>
+              <p className="text-[11px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.35)' }}>
                 ▸ 저장소 통계
               </p>
               <div className="grid grid-cols-3 gap-2 text-center">
                 {[
-                  { label: '스타',   value: repo.starCount       != null ? String(repo.starCount)       : '—' },
-                  { label: '포크',   value: repo.forkCount       != null ? String(repo.forkCount)       : '—' },
-                  { label: '이슈',   value: repo.openIssueCount  != null ? String(repo.openIssueCount)  : '—' },
-                ].map(({ label, value }) => (
+                  { label: '스타', value: starCount  != null ? formatCount(starCount)        : '—', color: '#ffc23a' },
+                  { label: '포크', value: forkCount  != null ? formatCount(forkCount)        : '—', color: 'rgba(255,255,255,0.78)' },
+                  { label: '이슈', value: issueCount != null ? formatCount(issueCount)       : '—', color: 'rgba(255,255,255,0.78)' },
+                ].map(({ label, value, color }) => (
                   <div
                     key={label}
-                    className="p-2"
+                    className="p-2.5"
                     style={{
                       background: 'rgba(0,212,255,0.02)',
                       border:     '1px solid rgba(0,212,255,0.08)',
                     }}
                   >
-                    <p className="text-[8px] tracking-widest uppercase" style={{ color: 'rgba(0,212,255,0.28)' }}>{label}</p>
-                    <p className="text-xs font-bold mt-0.5 tabular-nums" style={{ color: 'rgba(255,255,255,0.70)' }}>{value}</p>
+                    <p className="text-[10px] tracking-widest uppercase" style={{ color: 'rgba(0,212,255,0.30)' }}>{label}</p>
+                    <p className="text-base font-bold mt-1 tabular-nums" style={{ color }}>{value}</p>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Meta */}
-            <div className="space-y-1.5 text-[10px]">
+            <div className="space-y-1.5 text-[13px]">
               {repo.language && (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: langColor }} />
@@ -292,7 +367,7 @@ export default function SidePanel() {
                 {repo.topics.map((t) => (
                   <span
                     key={t}
-                    className="text-[9px] px-2 py-0.5 tracking-widest uppercase"
+                    className="text-[11px] px-2 py-1 tracking-widest uppercase"
                     style={{
                       color:      'rgba(0,212,255,0.60)',
                       background: 'rgba(0,212,255,0.06)',
@@ -308,7 +383,7 @@ export default function SidePanel() {
             {/* Score chart (desktop only) */}
             {!isMobile && history && history.length > 0 && (
               <div>
-                <p className="text-[8px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.32)' }}>
+                <p className="text-[11px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.35)' }}>
                   ▸ 활동 타임라인
                 </p>
                 <ScoreChart scores={history} width={panelWidth - 48} />
@@ -317,7 +392,7 @@ export default function SidePanel() {
 
             {/* AI analysis */}
             <div>
-              <p className="text-[8px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.32)' }}>
+              <p className="text-[11px] tracking-[0.22em] uppercase mb-2" style={{ color: 'rgba(0,212,255,0.35)' }}>
                 ▸ AI 분석
               </p>
               <RAGAnalysis owner={repoOwner} repo={repoName} />
@@ -328,7 +403,7 @@ export default function SidePanel() {
               href={repo.htmlUrl ?? `https://github.com/${repo.fullName}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-2.5 text-[10px] tracking-[0.18em] uppercase transition-all"
+              className="flex items-center justify-center gap-2 w-full py-3 text-[12px] tracking-[0.18em] uppercase transition-all cursor-pointer"
               style={{
                 color:      'rgba(0,212,255,0.50)',
                 background: 'rgba(0,212,255,0.03)',
@@ -354,7 +429,7 @@ export default function SidePanel() {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2">
             <span className="text-2xl" style={{ color: 'rgba(0,212,255,0.15)' }}>◈</span>
-            <p className="text-[10px] tracking-[0.22em] uppercase" style={{ color: 'rgba(0,212,255,0.22)' }}>
+            <p className="text-[12px] tracking-[0.22em] uppercase" style={{ color: 'rgba(0,212,255,0.25)' }}>
               {isMobile ? '별을 탭하면 정보를 볼 수 있어요' : '별을 클릭하면 정보를 볼 수 있어요'}
             </p>
           </div>

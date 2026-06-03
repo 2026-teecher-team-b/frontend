@@ -148,9 +148,9 @@ interface RepoListItemDto {
   name: string
   description: string | null
   language: string | null
-  starCount: number | null
-  forkCount: number | null
-  openIssueCount: number | null
+  starCount?: number        // 백엔드 RepoListItemDto (PR #58~) — 구버전 대비 optional
+  forkCount?: number
+  openIssuesCount?: number   // 주의: 백엔드 필드명은 's' 포함(openIssuesCount)
   brightnessScore: number
   activeScore: number
   healthScore: number
@@ -197,7 +197,7 @@ export default function App() {
           language:       item.language,
           starCount:      item.starCount ?? undefined,
           forkCount:      item.forkCount ?? undefined,
-          openIssueCount: item.openIssueCount ?? undefined,
+          openIssueCount: item.openIssuesCount ?? undefined,
         }))
 
         // ① 원시 float 값 보존 (Math.round 제거 — 정규화 정밀도 향상)
@@ -326,14 +326,7 @@ export default function App() {
           className="text-[10px] tracking-[0.22em] uppercase"
           style={{ color: 'rgba(0,212,255,0.55)' }}
         >
-          깃허브 갤럭시
-        </span>
-        <span style={{ color: 'rgba(0,212,255,0.18)', fontSize: 10 }}>//</span>
-        <span
-          className="text-[9px] tracking-widest"
-          style={{ color: isConnected ? 'rgba(0,212,255,0.38)' : 'rgba(255,62,62,0.50)' }}
-        >
-          {isConnected ? '온라인' : '연결 중...'}
+          GitHub Galaxy
         </span>
         {lastUpdatedAt && (
           <>

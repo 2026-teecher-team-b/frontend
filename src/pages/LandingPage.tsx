@@ -1,58 +1,36 @@
 /**
- * LandingPage.tsx — GitHub Galaxy 온보딩 (HUD / Cyber 리디자인)
+ * LandingPage.tsx — 깃허브 갤럭시 온보딩
+ *
+ * 별이 흐르는 배경 위에 간결한 히어로 + 핵심 소개 + 진입 CTA.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 interface Props {
   onEnter: () => void
 }
 
-const BOOT_LINES = [
-  { label: '별 필드 렌더러',   status: '준비',  color: '#00d4ff' },
-  { label: '저장소 매트릭스', status: '로드됨', color: '#00d4ff' },
-  { label: '은하 물리 엔진',  status: '정상',  color: '#00ff88' },
-  { label: 'AI RAG 엔진',     status: '대기',  color: '#ffaa00' },
-]
-
-const FEATURES = [
+const HIGHLIGHTS = [
   {
-    icon: '◈',
-    title: '3D 별 시각화',
-    desc: 'GitHub 저장소를 나선 은하의 살아있는 별로 렌더링합니다.',
+    symbol: '★',
+    title: '활동이 곧 밝기',
+    desc: '커밋·PR·이슈가 활발한 저장소일수록 더 밝고 큰 별로 빛납니다.',
   },
   {
-    icon: '◈',
-    title: '활동 기반 궤도',
-    desc: '활발한 저장소는 은하 핵 가까이, 비활성은 외곽으로 이동합니다.',
+    symbol: '◐',
+    title: '은하 속 궤도',
+    desc: '활발한 저장소는 은하 중심으로, 잠든 저장소는 외곽으로 흩어집니다.',
   },
   {
-    icon: '◈',
-    title: 'AI 저장소 분석',
-    desc: 'RAG 기반 AI가 모든 저장소에 대한 자연어 질문에 답합니다.',
-  },
-  {
-    icon: '◈',
-    title: '즐겨찾기 & 검색',
-    desc: '저장소를 북마크하고 은하 전체에서 빠르게 검색하세요.',
+    symbol: '✦',
+    title: 'AI에게 묻기',
+    desc: '저장소 문서를 학습한 AI가 “무엇을 하는 프로젝트인지” 답해줍니다.',
   },
 ]
 
 export default function LandingPage({ onEnter }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [bootPhase, setBootPhase] = useState(0)
 
-  // Boot animation — stagger each status line
-  useEffect(() => {
-    let i = 0
-    const id = setInterval(() => {
-      i++
-      setBootPhase(i)
-      if (i >= BOOT_LINES.length) clearInterval(id)
-    }, 260)
-    return () => clearInterval(id)
-  }, [])
-
-  // Background star + grid canvas
+  // 흐르는 별 배경
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -60,45 +38,46 @@ export default function LandingPage({ onEnter }: Props) {
     if (!ctx) return
 
     const resize = () => {
-      canvas.width  = window.innerWidth
+      canvas.width = window.innerWidth
       canvas.height = window.innerHeight
     }
     resize()
     window.addEventListener('resize', resize)
 
-    const stars = Array.from({ length: 180 }, () => ({
-      x:     Math.random(),
-      y:     Math.random(),
-      r:     Math.random() * 1.1 + 0.2,
-      alpha: Math.random() * 0.45 + 0.08,
-      speed: Math.random() * 0.14 + 0.03,
+    const stars = Array.from({ length: 220 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      r: Math.random() * 1.3 + 0.2,
+      alpha: Math.random() * 0.5 + 0.1,
+      speed: Math.random() * 0.14 + 0.02,
       phase: Math.random() * Math.PI * 2,
+      hue: Math.random() < 0.18 ? 'warm' : 'cool',
     }))
 
     let raf: number
     let t = 0
 
     const draw = () => {
-      ctx.fillStyle = '#000a18'
+      // 깊은 우주 그라데이션
+      const g = ctx.createRadialGradient(
+        canvas.width * 0.5, canvas.height * 0.62, 0,
+        canvas.width * 0.5, canvas.height * 0.62, canvas.height * 0.9,
+      )
+      g.addColorStop(0, '#0a1430')
+      g.addColorStop(0.5, '#050a1c')
+      g.addColorStop(1, '#02040d')
+      ctx.fillStyle = g
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      // Grid lines
-      ctx.strokeStyle = 'rgba(0,212,255,0.028)'
-      ctx.lineWidth = 1
-      const g = 64
-      for (let x = 0; x < canvas.width; x += g) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke()
-      }
-      for (let y = 0; y < canvas.height; y += g) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke()
-      }
-
-      // Stars
       for (const s of stars) {
-        const pulse = Math.sin(t * s.speed + s.phase) * 0.3 + 0.7
+        const pulse = Math.sin(t * s.speed + s.phase) * 0.35 + 0.65
+        const a = (s.alpha * pulse).toFixed(3)
         ctx.beginPath()
         ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(0,212,255,${(s.alpha * pulse * 0.65).toFixed(3)})`
+        ctx.fillStyle =
+          s.hue === 'warm'
+            ? `rgba(255,210,150,${a})`
+            : `rgba(150,210,255,${a})`
         ctx.fill()
       }
 
@@ -114,199 +93,95 @@ export default function LandingPage({ onEnter }: Props) {
   }, [])
 
   return (
-    <div
-      className="relative w-full h-full overflow-hidden select-none"
-      style={{ background: '#000a18' }}
-    >
-      {/* Background canvas */}
+    <div className="relative w-full h-full overflow-hidden select-none" style={{ background: '#02040d' }}>
       <canvas ref={canvasRef} className="absolute inset-0 z-0" />
 
-      {/* Scan-line overlay */}
+      {/* 중심부 은은한 발광 */}
       <div
         className="absolute inset-0 z-0 pointer-events-none"
         style={{
           background:
-            'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.055) 2px, rgba(0,0,0,0.055) 4px)',
+            'radial-gradient(ellipse 60% 50% at 50% 60%, rgba(80,160,255,0.10) 0%, transparent 65%)',
         }}
       />
 
-      {/* Radial glow */}
-      <div
-        className="absolute inset-0 z-0 pointer-events-none"
-        style={{
-          background:
-            'radial-gradient(ellipse 55% 45% at 50% 58%, rgba(0,212,255,0.055) 0%, transparent 70%)',
-        }}
-      />
-
-      {/* ── Main content ─────────────────────────────────────────── */}
-      <div className="relative z-10 flex flex-col items-center justify-center h-full px-4 text-center">
-
-        {/* ── Top badge ─────────────────────────────────────────── */}
-        <div
-          className="mb-6 flex items-center gap-2 text-[9px] tracking-[0.28em] uppercase"
-          style={{ color: 'rgba(0,212,255,0.38)' }}
-        >
-          <span style={{ color: 'rgba(0,212,255,0.25)' }}>◈</span>
-          <span>GITHUB.GALAXY</span>
-          <span style={{ color: 'rgba(0,212,255,0.18)' }}>//</span>
-          <span style={{ color: 'rgba(0,212,255,0.28)' }}>WEBGL COMMAND v1.0</span>
-          <span style={{ color: 'rgba(0,212,255,0.25)' }}>◈</span>
-        </div>
-
-        {/* ── Title ─────────────────────────────────────────────── */}
-        <h1
-          className="text-4xl sm:text-5xl font-black tracking-[-0.01em] text-white mb-1.5"
-          style={{ textShadow: '0 0 40px rgba(0,212,255,0.32), 0 0 80px rgba(0,212,255,0.1)' }}
-        >
-          깃허브 갤럭시
-        </h1>
-        <p
-          className="text-[10px] tracking-[0.3em] mb-8"
-          style={{ color: 'rgba(0,212,255,0.38)' }}
-        >
-          오픈소스 저장소 은하 탐험
+      {/* ── 본문 ──────────────────────────────────────────────── */}
+      <div className="relative z-10 flex flex-col items-center justify-center h-full px-6 text-center">
+        {/* 키커 */}
+        <p className="mb-5 text-sm tracking-[0.2em]" style={{ color: 'rgba(150,200,255,0.55)' }}>
+          오픈소스 우주를 여행하는 또 다른 방법
         </p>
 
-        {/* ── Boot sequence panel ───────────────────────────────── */}
-        <div className="mb-7 w-full max-w-sm">
-          <div
-            className="relative px-3.5 py-2.5"
-            style={{
-              background: 'rgba(0,10,24,0.82)',
-              border: '1px solid rgba(0,212,255,0.15)',
-            }}
-          >
-            {/* Corner brackets */}
-            <span className="absolute top-0 left-0 w-3 h-3 border-t border-l" style={{ borderColor: 'rgba(0,212,255,0.55)' }} />
-            <span className="absolute top-0 right-0 w-3 h-3 border-t border-r" style={{ borderColor: 'rgba(0,212,255,0.55)' }} />
-            <span className="absolute bottom-0 left-0 w-3 h-3 border-b border-l" style={{ borderColor: 'rgba(0,212,255,0.55)' }} />
-            <span className="absolute bottom-0 right-0 w-3 h-3 border-b border-r" style={{ borderColor: 'rgba(0,212,255,0.55)' }} />
+        {/* 타이틀 */}
+        <h1
+          className="text-6xl sm:text-7xl font-black tracking-tight text-white mb-5"
+          style={{ textShadow: '0 0 60px rgba(90,160,255,0.35)' }}
+        >
+          GitHub Galaxy
+        </h1>
 
-            <p
-              className="text-[9px] tracking-[0.22em] uppercase mb-2.5"
-              style={{ color: 'rgba(0,212,255,0.38)' }}
-            >
-              ▸ SYSTEM STATUS
-            </p>
-            <ul className="space-y-1.5">
-              {BOOT_LINES.map((line, i) => (
-                <li
-                  key={line.label}
-                  className="flex items-center justify-between text-[10px] transition-opacity duration-200"
-                  style={{ opacity: i < bootPhase ? 1 : 0 }}
-                >
-                  <span style={{ color: 'rgba(255,255,255,0.38)' }}>{line.label}</span>
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{
-                        backgroundColor: line.color,
-                        boxShadow: `0 0 6px ${line.color}`,
-                      }}
-                    />
-                    <span
-                      className="text-[9px] tracking-widest"
-                      style={{ color: line.color }}
-                    >
-                      {line.status}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+        {/* 서브 카피 */}
+        <p
+          className="max-w-xl text-base sm:text-lg leading-relaxed mb-12"
+          style={{ color: 'rgba(255,255,255,0.62)' }}
+        >
+          수천 개의 GitHub 저장소를 하나의 은하로 펼쳤습니다.
+          별 하나하나가 살아있는 프로젝트예요.
+          마음에 드는 별을 골라 활동과 트렌드, AI 분석까지 들여다보세요.
+        </p>
 
-        {/* ── Feature grid ──────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-8 w-full max-w-2xl">
-          {FEATURES.map(({ icon, title, desc }) => (
-            <div
-              key={title}
-              className="relative p-3 text-left transition-all duration-200 group"
-              style={{
-                background: 'rgba(0,13,32,0.60)',
-                border: '1px solid rgba(0,212,255,0.10)',
-              }}
-              onMouseEnter={(e) => {
-                ;(e.currentTarget as HTMLDivElement).style.borderColor =
-                  'rgba(0,212,255,0.26)'
-                ;(e.currentTarget as HTMLDivElement).style.background =
-                  'rgba(0,13,32,0.82)'
-              }}
-              onMouseLeave={(e) => {
-                ;(e.currentTarget as HTMLDivElement).style.borderColor =
-                  'rgba(0,212,255,0.10)'
-                ;(e.currentTarget as HTMLDivElement).style.background =
-                  'rgba(0,13,32,0.60)'
-              }}
-            >
-              {/* Micro corner brackets */}
-              <span className="absolute top-0 left-0 w-2 h-2 border-t border-l" style={{ borderColor: 'rgba(0,212,255,0.40)' }} />
-              <span className="absolute bottom-0 right-0 w-2 h-2 border-b border-r" style={{ borderColor: 'rgba(0,212,255,0.40)' }} />
-
-              <p className="text-lg mb-1.5" style={{ color: 'rgba(0,212,255,0.50)' }}>{icon}</p>
-              <p
-                className="text-[9px] font-bold tracking-widest uppercase mb-1"
-                style={{ color: 'rgba(255,255,255,0.75)' }}
-              >
+        {/* 하이라이트 */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-8 mb-14 w-full max-w-3xl">
+          {HIGHLIGHTS.map(({ symbol, title, desc }) => (
+            <div key={title} className="text-center sm:text-left">
+              <div className="text-2xl mb-2" style={{ color: 'rgba(130,195,255,0.85)' }}>
+                {symbol}
+              </div>
+              <p className="text-[15px] font-semibold mb-1.5" style={{ color: 'rgba(255,255,255,0.88)' }}>
                 {title}
               </p>
-              <p className="text-[9px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.28)' }}>
+              <p className="text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>
                 {desc}
               </p>
             </div>
           ))}
         </div>
 
-        {/* ── CTA button ────────────────────────────────────────── */}
+        {/* CTA */}
         <button
           onClick={onEnter}
-          className="relative px-10 py-3 font-bold uppercase tracking-[0.22em] text-sm transition-all duration-200"
+          className="group relative px-12 py-4 rounded-full font-bold text-base tracking-wide transition-all duration-200"
           style={{
-            color: '#00d4ff',
-            border: '1px solid rgba(0,212,255,0.40)',
-            background: 'rgba(0,212,255,0.05)',
-            boxShadow: '0 0 24px rgba(0,212,255,0.08)',
+            color: '#04060f',
+            background: 'linear-gradient(135deg, #9fd2ff 0%, #5aa0ff 100%)',
+            boxShadow: '0 0 40px rgba(90,160,255,0.35)',
           }}
           onMouseEnter={(e) => {
             const el = e.currentTarget as HTMLButtonElement
-            el.style.color = '#ffffff'
-            el.style.borderColor = 'rgba(0,212,255,0.72)'
-            el.style.background = 'rgba(0,212,255,0.10)'
-            el.style.boxShadow = '0 0 32px rgba(0,212,255,0.18), inset 0 0 20px rgba(0,212,255,0.04)'
+            el.style.boxShadow = '0 0 56px rgba(90,160,255,0.55)'
+            el.style.transform = 'translateY(-2px)'
           }}
           onMouseLeave={(e) => {
             const el = e.currentTarget as HTMLButtonElement
-            el.style.color = '#00d4ff'
-            el.style.borderColor = 'rgba(0,212,255,0.40)'
-            el.style.background = 'rgba(0,212,255,0.05)'
-            el.style.boxShadow = '0 0 24px rgba(0,212,255,0.08)'
+            el.style.boxShadow = '0 0 40px rgba(90,160,255,0.35)'
+            el.style.transform = 'translateY(0)'
           }}
         >
-          {/* Button corner brackets */}
-          <span className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2" style={{ borderColor: 'rgba(0,212,255,0.65)' }} />
-          <span className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2" style={{ borderColor: 'rgba(0,212,255,0.65)' }} />
-          <span className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2" style={{ borderColor: 'rgba(0,212,255,0.65)' }} />
-          <span className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2" style={{ borderColor: 'rgba(0,212,255,0.65)' }} />
-          ▶ 탐험 시작
+          은하 탐험 시작하기 →
         </button>
 
-        {/* Navigation hint */}
-        <p
-          className="mt-5 text-[9px] tracking-[0.22em] uppercase"
-          style={{ color: 'rgba(0,212,255,0.20)' }}
-        >
-          드래그 회전 · 스크롤 줌 · 별 클릭으로 정보 확인
+        {/* 조작 힌트 */}
+        <p className="mt-7 text-[13px]" style={{ color: 'rgba(150,200,255,0.35)' }}>
+          드래그로 회전 · 스크롤로 확대 · 별을 클릭하면 자세히
         </p>
       </div>
 
-      {/* ── Footer credit ─────────────────────────────────────────── */}
+      {/* 푸터 */}
       <div
-        className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[9px] z-10 tracking-widest uppercase"
-        style={{ color: 'rgba(0,212,255,0.14)' }}
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[12px] z-10 tracking-wide"
+        style={{ color: 'rgba(150,200,255,0.22)' }}
       >
-        2026 TECHEER PROJECT B-TEAM
+        2026 Techeer Project · B Team
       </div>
     </div>
   )

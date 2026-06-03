@@ -65,7 +65,7 @@ export default function Tooltip() {
     >
       {repo && (
         <div
-          className="relative min-w-[170px] max-w-[210px]"
+          className="relative min-w-[200px] max-w-[250px]"
           style={{
             background:     'rgba(0,8,20,0.95)',
             border:         '1px solid rgba(0,212,255,0.22)',
@@ -80,10 +80,10 @@ export default function Tooltip() {
 
           {/* Repo header */}
           <div className="px-3 py-2" style={{ borderBottom: '1px solid rgba(0,212,255,0.08)' }}>
-            <p className="text-[11px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.90)' }}>
+            <p className="text-[14px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.92)' }}>
               {repo.name}
             </p>
-            <p className="text-[9px] truncate mt-0.5" style={{ color: 'rgba(0,212,255,0.38)' }}>
+            <p className="text-[11px] truncate mt-0.5" style={{ color: 'rgba(0,212,255,0.42)' }}>
               {repo.fullName}
             </p>
           </div>
@@ -95,11 +95,11 @@ export default function Tooltip() {
                 className="w-1.5 h-1.5 rounded-full"
                 style={{ backgroundColor: langColor, boxShadow: `0 0 5px ${langColor}` }}
               />
-              <span className="text-[9px] tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.55)' }}>
+              <span className="text-[11px] tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.58)' }}>
                 {repo.language}
               </span>
               {isBlackHole && (
-                <span className="text-[8px] tracking-widest ml-auto" style={{ color: '#ff3e3e' }}>
+                <span className="text-[10px] tracking-widest ml-auto" style={{ color: '#ff3e3e' }}>
                   ⬤ 블랙홀
                 </span>
               )}
@@ -120,10 +120,10 @@ export default function Tooltip() {
                   color: '#ffc23a' },
               ].map(({ label, value, color }) => (
                 <div key={label} className="text-center">
-                  <p className="text-[8px] tracking-widest uppercase mb-0.5" style={{ color: 'rgba(0,212,255,0.30)' }}>
+                  <p className="text-[10px] tracking-widest uppercase mb-0.5" style={{ color: 'rgba(0,212,255,0.30)' }}>
                     {label}
                   </p>
-                  <p className="text-[11px] font-bold tabular-nums" style={{ color }}>
+                  <p className="text-[14px] font-bold tabular-nums" style={{ color }}>
                     {value}
                   </p>
                 </div>
@@ -137,7 +137,7 @@ export default function Tooltip() {
               className="px-3 py-1.5 flex items-center"
               style={{ borderTop: '1px solid rgba(0,212,255,0.06)' }}
             >
-              <span className="text-[9px] tracking-widest uppercase" style={{ color: trend.color }}>
+              <span className="text-[11px] tracking-widest uppercase" style={{ color: trend.color }}>
                 {trend.text}
               </span>
             </div>
