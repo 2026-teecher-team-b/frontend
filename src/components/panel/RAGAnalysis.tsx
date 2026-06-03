@@ -43,7 +43,7 @@ function friendlyErrorMessage(error: Error | null): string {
 export default function RAGAnalysis({ owner, repo }: Props) {
   const [inputValue, setInputValue] = useState('')
   const [submittedQuestion, setSubmittedQuestion] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const { data, isLoading, isError, error } = useRagExplain(
     owner || null,
@@ -51,14 +51,29 @@ export default function RAGAnalysis({ owner, repo }: Props) {
     submittedQuestion,
   )
 
+  /** textarea 높이를 내용에 맞춰 자동 조절 (한 줄 → 여러 줄) */
+  const autoResize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }
+
   const handleSubmit = () => {
     const q = inputValue.trim() || DEFAULT_QUESTION
     setSubmittedQuestion(q)
     setInputValue('')
+    // 입력 비운 뒤 높이 초기화
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+    }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleSubmit()
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter 전송 / Shift+Enter 줄바꿈
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
   }
 
   return (
@@ -71,18 +86,18 @@ export default function RAGAnalysis({ owner, repo }: Props) {
 
       {/* 질문 입력창 */}
       {!isLoading && (
-        <div className="flex gap-2 mb-3">
-          <input
+        <div className="flex gap-2 mb-3 items-end">
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => { setInputValue(e.target.value); autoResize(e.target) }}
             onKeyDown={handleKeyDown}
             placeholder={submittedQuestion ?? DEFAULT_QUESTION}
             className="
               flex-1 bg-black/60 border border-white/20 rounded-lg
-              px-3 py-2 text-[13px] font-mono text-white/90
-              placeholder:text-white/35
+              px-3 py-2 text-[13px] font-mono text-white/90 leading-relaxed
+              placeholder:text-white/35 resize-none overflow-y-auto
               focus:outline-none focus:border-blue-400/60 focus:bg-black/70
               transition-all
             "
