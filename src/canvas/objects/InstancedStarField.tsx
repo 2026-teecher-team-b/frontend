@@ -111,6 +111,7 @@ export default function InstancedStarField() {
   const repositories = useGalaxyStore((s) => s.repositories)
   const scores       = useGalaxyStore((s) => s.scores)
   const langFilter   = useUIStore((s) => s.langFilter)
+  const selectedRepoId = useUIStore((s) => s.selectedRepoId)
   const { selectRepo, setHovered } = useUIStore()
 
   const count = repositories.length
@@ -208,6 +209,7 @@ export default function InstancedStarField() {
     if (!mesh || count === 0) return
 
     const dt = Math.min(delta, 0.05)
+    const t  = state.clock.elapsedTime
 
     // count가 처음 생긴 직후 몇 프레임: material.needsUpdate = true 강제
     // (셰이더 재컴파일 타이밍 보장 — 환경에 따라 useLayoutEffect만으론 부족할 수 있음)
@@ -243,6 +245,7 @@ export default function InstancedStarField() {
       const sizeScore   = score?.sizeScore     ?? 30
       const isBlackHole = healthScore < BLACKHOLE_HEALTH_THRESHOLD
       const isHovered   = i === hoveredIdx.current
+      const isSelected  = repoId === selectedRepoId
       const isHidden    = langFilter.length > 0 && !langFilter.includes(repo.language ?? '')
 
       // ── 페이드인 ─────────────────────────────────────────────
@@ -251,10 +254,11 @@ export default function InstancedStarField() {
 
       // ── 스케일 Lerp (STAR_SCALE 배율 적용) ───────────────────
       const targetScale = isHidden ? 0 : scoreToRadius(sizeScore, actScore) * STAR_SCALE
-      const hoverMult   = isHovered ? 1.35 : 1.0
+      // 선택된 별은 가장 크게(1.5×), 호버는 1.35×
+      const emphasisMult = isSelected ? 1.5 : isHovered ? 1.35 : 1.0
       const prevScale   = curScale.current[i] || 0
       curScale.current[i] = prevScale + (targetScale - prevScale) * (3.5 * dt)
-      const finalScale = Math.max(0, curScale.current[i] * hoverMult * fadeT)
+      const finalScale = Math.max(0, curScale.current[i] * emphasisMult * fadeT)
 
       // ── 자전 ─────────────────────────────────────────────────
       const speedMult = isBlackHole ? 4.5 : 1.0
@@ -274,19 +278,23 @@ export default function InstancedStarField() {
         _color.set('#050508')
       } else {
         _color.set(getLanguageColor(repo.language))
-        if (isHovered) _color.lerp(_white, 0.30)
+        if (isSelected)     _color.lerp(_white, 0.5)   // 선택 — 가장 밝게
+        else if (isHovered) _color.lerp(_white, 0.30)
       }
       mesh.setColorAt(i, _color)
 
       // ── 글로우(헤일로) — 카메라를 향하는 평면, 별보다 크게 ─────
       if (glow) {
+        // 선택된 별은 계속 빛남 — 더 크고 은은하게 맥동하는 헤일로
         // 블랙홀은 빛나지 않음 → 글로우 숨김
-        const glowSize = isBlackHole ? 0 : finalScale * GLOW_MULT * (isHovered ? 1.3 : 1.0)
+        const selectGlow = isSelected ? 1.9 + Math.sin(t * 3) * 0.3 : isHovered ? 1.3 : 1.0
+        const glowSize = isBlackHole ? 0 : finalScale * GLOW_MULT * selectGlow
         _glowScale.setScalar(glowSize)
         _glowMat.compose(_pos, camQuat, _glowScale)
         glow.setMatrixAt(i, _glowMat)
         // 글로우 색은 언어색을 살짝 밝게 (가산 블렌딩이라 은은하게 번짐)
-        _glowColor.copy(_color).lerp(_white, 0.25)
+        // 선택 시 더 밝게 → 항상 빛나 보이게
+        _glowColor.copy(_color).lerp(_white, isSelected ? 0.5 : 0.25)
         glow.setColorAt(i, _glowColor)
       }
     }
