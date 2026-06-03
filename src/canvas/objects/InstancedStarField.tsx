@@ -55,6 +55,31 @@ function createStarGeometry(): ExtrudeGeometry {
 
 const SHARED_GEO = createStarGeometry()
 
+// ── 별 글로우(헤일로) ───────────────────────────────────────────────
+// 별 뒤에 카메라를 향하는 평면 + 방사형 그라데이션 텍스처를 가산 블렌딩으로
+// 깔아 "빛나는 점" 느낌을 준다. (포스트프로세싱 없이 draw call 1개만 추가)
+function createGlowTexture(): THREE.CanvasTexture {
+  const size = 128
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const ctx = c.getContext('2d')!
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  g.addColorStop(0,    'rgba(255,255,255,1)')
+  g.addColorStop(0.18, 'rgba(255,255,255,0.65)')
+  g.addColorStop(0.45, 'rgba(255,255,255,0.20)')
+  g.addColorStop(1,    'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, size, size)
+  const tex = new THREE.CanvasTexture(c)
+  tex.needsUpdate = true
+  return tex
+}
+
+const GLOW_TEX = createGlowTexture()
+const GLOW_GEO = new THREE.PlaneGeometry(1, 1)
+/** 글로우 평면 크기 = 별 스케일 × 배율 (별 지름의 약 2배 헤일로) */
+const GLOW_MULT = 4
+
 /** InstancedMesh 최대 슬롯 수 — args에 고정해야 R3F가 재생성하지 않음 */
 const MAX_INSTANCES = 2000
 
@@ -73,10 +98,15 @@ const _scale = new THREE.Vector3()
 const _euler = new THREE.Euler()
 const _color = new THREE.Color()
 const _white = new THREE.Color('#ffffff')
+// 글로우 전용 임시 객체
+const _glowMat   = new THREE.Matrix4()
+const _glowScale = new THREE.Vector3()
+const _glowColor = new THREE.Color()
 
 // ─────────────────────────────────────────────────────────────────────
 export default function InstancedStarField() {
   const meshRef = useRef<THREE.InstancedMesh>(null)
+  const glowRef = useRef<THREE.InstancedMesh>(null)
 
   const repositories = useGalaxyStore((s) => s.repositories)
   const scores       = useGalaxyStore((s) => s.scores)
@@ -127,6 +157,13 @@ export default function InstancedStarField() {
       const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
       if (mat) (mat as THREE.Material).needsUpdate = true
     }
+    const glow = glowRef.current
+    if (glow && count > 0) {
+      glow.setColorAt(0, _white)
+      if (glow.instanceColor) glow.instanceColor.needsUpdate = true
+      const gmat = Array.isArray(glow.material) ? glow.material[0] : glow.material
+      if (gmat) (gmat as THREE.Material).needsUpdate = true
+    }
   }, [count])
 
   // ── 셰이더 USE_INSTANCING_COLOR 초기화 ──────────────────────────
@@ -141,6 +178,14 @@ export default function InstancedStarField() {
     // 셰이더 재컴파일 예약 — USE_INSTANCING_COLOR 포함 버전으로
     const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
     if (mat) (mat as THREE.Material).needsUpdate = true
+    // 글로우 메시도 동일하게 instanceColor 초기화
+    const glow = glowRef.current
+    if (glow) {
+      glow.setColorAt(0, _white)
+      if (glow.instanceColor) glow.instanceColor.needsUpdate = true
+      const gmat = Array.isArray(glow.material) ? glow.material[0] : glow.material
+      if (gmat) (gmat as THREE.Material).needsUpdate = true
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── physicsStore 등록 ────────────────────────────────────────────
@@ -157,8 +202,9 @@ export default function InstancedStarField() {
   }, [repositories, scores])
 
   // ── 매 프레임 업데이트 ──────────────────────────────────────────
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const mesh = meshRef.current
+    const glow = glowRef.current
     if (!mesh || count === 0) return
 
     const dt = Math.min(delta, 0.05)
@@ -169,7 +215,14 @@ export default function InstancedStarField() {
       shaderBootFrames.current++
       const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
       if (mat) (mat as THREE.Material).needsUpdate = true
+      if (glow) {
+        const gmat = Array.isArray(glow.material) ? glow.material[0] : glow.material
+        if (gmat) (gmat as THREE.Material).needsUpdate = true
+      }
     }
+
+    // 글로우 빌보드 회전 = 카메라 방향 (모든 글로우 평면 공통)
+    const camQuat = state.camera.quaternion
 
     for (let i = 0; i < count; i++) {
       const repoId = instanceToRepoId[i]
@@ -179,6 +232,7 @@ export default function InstancedStarField() {
         _scale.setScalar(0)
         _mat.compose(_pos, _quat, _scale)
         mesh.setMatrixAt(i, _mat)
+        if (glow) { glow.setMatrixAt(i, _mat) }  // 동일하게 숨김(scale 0)
         continue
       }
 
@@ -223,10 +277,26 @@ export default function InstancedStarField() {
         if (isHovered) _color.lerp(_white, 0.30)
       }
       mesh.setColorAt(i, _color)
+
+      // ── 글로우(헤일로) — 카메라를 향하는 평면, 별보다 크게 ─────
+      if (glow) {
+        // 블랙홀은 빛나지 않음 → 글로우 숨김
+        const glowSize = isBlackHole ? 0 : finalScale * GLOW_MULT * (isHovered ? 1.3 : 1.0)
+        _glowScale.setScalar(glowSize)
+        _glowMat.compose(_pos, camQuat, _glowScale)
+        glow.setMatrixAt(i, _glowMat)
+        // 글로우 색은 언어색을 살짝 밝게 (가산 블렌딩이라 은은하게 번짐)
+        _glowColor.copy(_color).lerp(_white, 0.25)
+        glow.setColorAt(i, _glowColor)
+      }
     }
 
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    if (glow) {
+      glow.instanceMatrix.needsUpdate = true
+      if (glow.instanceColor) glow.instanceColor.needsUpdate = true
+    }
   })
 
   // ── 이벤트 핸들러 ────────────────────────────────────────────────
@@ -238,14 +308,12 @@ export default function InstancedStarField() {
     const repoId = instanceToRepoId[idx]
     if (repoId !== undefined) {
       setHovered(repoId)
-      document.body.style.cursor = 'pointer'
     }
   }
 
   const handlePointerOut = () => {
     hoveredIdx.current = -1
     setHovered(null)
-    document.body.style.cursor = 'grab'
   }
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
@@ -268,6 +336,33 @@ export default function InstancedStarField() {
 
   return (
     <>
+      {/*
+        글로우 헤일로 — 별 뒤에서 가산 블렌딩.
+        실제 별 도형(★)은 매우 작아 클릭이 어렵기 때문에, 사용자가 보는 대로
+        클릭되도록 '넓은 글로우 평면'을 클릭/호버 히트 영역으로 사용한다.
+        (glow instanceId === star instanceId — instanceToRepoId 매핑 동일)
+      */}
+      <instancedMesh
+        ref={glowRef}
+        args={[GLOW_GEO, undefined, MAX_INSTANCES]}
+        count={count}
+        frustumCulled={false}
+        renderOrder={-1}
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <meshBasicMaterial
+          map={GLOW_TEX}
+          color="white"
+          transparent
+          opacity={0.6}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
       <instancedMesh
         ref={meshRef}
         args={[SHARED_GEO, undefined, MAX_INSTANCES]}

@@ -27,6 +27,29 @@ export interface Repository {
   htmlUrl?: string
 }
 
+/**
+ * 점수 변화 이유 — GET /repos/{owner}/{repo}/trend 응답
+ * 백엔드 RepoController.trend() → TrendReasonService (LLM 생성, Redis/DB 캐시)
+ */
+export interface TrendReason {
+  owner: string
+  repo: string
+  trend: '상승' | '하락' | '보합' | string  // 7일 평균 대비 24h 활동 변화
+  changeRate: number                        // 변화율 (%)
+  reason: string                            // LLM이 생성한 자연어 설명
+  generatedAt: string                       // ISO 8601
+}
+
+/**
+ * 저장소 통계 — GET /repos/search 의 RepoResponse 일부
+ * starCount는 항상 제공, forkCount·openIssueCount는 백엔드 재배포·재수집 후 제공
+ */
+export interface RepoStats {
+  starCount?: number
+  forkCount?: number
+  openIssueCount?: number
+}
+
 /** 저장소 활동 점수 (BE에서 산출) */
 export interface RepoScore {
   repoId: number
