@@ -560,18 +560,74 @@
       </ul>
     </div>
   </div>
-  <p style="font-size:0.6em; color:rgba(255,255,255,0.45); text-align:center; margin-top:16px;">
-    Intent 가중치 — LATEST 50% · NEUTRAL 30% · STABLE 10% (time score)
-  </p>
 </section>
 
 <!-- ══════════════════════════════════════════
-     8. 고도화 ② 프론트 — 대용량 3D 렌더링
+     8. 고도화 ② 백엔드 — Query-aware Hybrid Retrieval
+══════════════════════════════════════════ -->
+<section>
+  <div class="nebula-bl"></div>
+  <div class="section-chip">Enhancement · Backend</div>
+  <h2>고도화 ② Query-aware Hybrid Retrieval <span style="font-size:0.5em; color:rgba(255,255,255,0.4);">· PR #50</span></h2>
+  <div class="card-grid col2" style="margin-top:14px; align-items:start;">
+    <div>
+      <div class="card" style="margin-bottom:10px; border-color:rgba(220,80,80,0.45); background:rgba(220,50,50,0.07);">
+        <h3 style="color:#ff8080; font-size:1.02em;">🔴 문제 — 의미는 같아도 '오래된' 문서</h3>
+        <ul style="font-size:0.82em; line-height:1.55;">
+          <li>Dense(임베딩 유사도)만으로 검색 → <strong>구버전 문서가 상위로</strong></li>
+          <li>"설치 방법 알려줘" → 구버전 설치 문서가 컨텍스트에 포함</li>
+          <li>동일 레포의 여러 버전 청크 혼재 → 최신 기준 <strong>오답</strong> 가능</li>
+        </ul>
+        <p style="font-size:0.7em; color:rgba(255,255,255,0.6); margin:8px 0 0;">핵심은 "정답 여부"가 아니라 <strong style="color:#fff;">지금 유효한 정답</strong>인가</p>
+      </div>
+      <div class="card" style="border-color:rgba(0,212,255,0.4); background:rgba(0,212,255,0.06);">
+        <h3 style="color:var(--accent-cyan); font-size:1.02em;">🟢 해결 — 질문 의도 + 최신성 결합</h3>
+        <ul style="font-size:0.82em; line-height:1.55;">
+          <li>질문의 <strong>시간적 의도(Intent)</strong>를 감지해 Time Score 가중</li>
+          <li>Intent별 Retrieval 전략 <strong>동적 변경</strong> (기본값 LATEST)</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="intent-row">
+        <div class="intent-card latest">
+          <div class="ic-name">LATEST</div>
+          <div class="ic-ratio">Dense 50 · Time 50</div>
+          <div class="ic-keywords">최신·최근·recent·trending</div>
+        </div>
+        <div class="intent-card neutral">
+          <div class="ic-name">NEUTRAL</div>
+          <div class="ic-ratio">Dense 70 · Time 30</div>
+          <div class="ic-keywords">그 외 일반 질문</div>
+        </div>
+        <div class="intent-card stable">
+          <div class="ic-name">STABLE</div>
+          <div class="ic-ratio">Dense 90 · Time 10</div>
+          <div class="ic-keywords">stable·검증된·안정적</div>
+        </div>
+      </div>
+      <div class="code-block" style="margin-top:10px; font-size:0.56em;">score = (w_dense × cosine_similarity) + (w_time × time_score)</div>
+      <div style="font-size:0.62em; color:rgba(255,255,255,0.72); text-align:center; margin-top:10px; line-height:1.6;">
+        Intent 감지 → Dense Top-K → <span style="color:var(--accent-cyan);">레포별 그룹핑</span> → <span style="color:var(--accent-cyan);">Hybrid 재랭킹</span> → LLM
+      </div>
+      <div class="card" style="margin-top:10px; border-color:rgba(0,200,130,0.45); background:rgba(0,200,130,0.06);">
+        <h3 style="color:#00e5a0; font-size:1.0em;">🔵 결과</h3>
+        <ul style="font-size:0.82em; line-height:1.5;">
+          <li>최신 문서 우선 응답 · 동일 레포 버전 혼재 완화</li>
+          <li>개발 문서 환경 오답 가능성 ↓ · 의도별 동적 Retrieval 확보</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     9. 고도화 ③ 프론트 — 대용량 3D 렌더링
 ══════════════════════════════════════════ -->
 <section>
   <div class="nebula-tr"></div>
   <div class="section-chip">Enhancement · Frontend</div>
-  <h2>고도화 ② 대용량 3D 렌더링</h2>
+  <h2>고도화 ③ 대용량 3D 렌더링</h2>
   <div class="card-grid col3" style="margin-top:20px; align-items:start;">
     <div class="card" style="border-color:rgba(220,80,80,0.45); background:rgba(220,50,50,0.07);">
       <h3 style="color:#ff8080;">🔴 문제</h3>
